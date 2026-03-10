@@ -21,7 +21,8 @@ import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useFilters } from "@/context/FilterContext";
-import { fetchServiceOrders, type ServiceOrder, getClientName } from "@/services/api";
+import { getServicesOrders, getClientName } from "@/services/servicesOrders";
+import type { ServiceOrder } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 
 export default function OrdersScreen() {
@@ -33,20 +34,23 @@ export default function OrdersScreen() {
   const [localSearch, setLocalSearch] = useState("");
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
 
-  const queryParams: Record<string, string> = {};
-  if (filters.status) queryParams.status = filters.status;
-  if (filters.type) queryParams.so_type = filters.type;   // API usa so_type
-  if (filters.routeName) queryParams.route_name = filters.routeName;
-  // Filtros de data (últimos 20 dias por padrão)
-  if (filters.startDate) queryParams.start_date = filters.startDate;
-  if (filters.endDate) queryParams.end_date = filters.endDate;
-
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["service_orders", filters, baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Nao autenticado");
       try {
-        const orders = await fetchServiceOrders({ baseUrl, credentials }, queryParams);
+        // Prepara filtros no formato esperado pelo serviço
+        const filterParams = {
+          filters: {
+            status: filters.status || "",
+            so_type: filters.type || "",
+            start_date: filters.startDate || "",
+            end_date: filters.endDate || "",
+            voyage: filters.hasVoyage || "",
+          },
+        };
+
+        const orders = await getServicesOrders(filterParams);
         setDebugInfo(null);
         return orders;
       } catch (err: unknown) {
@@ -54,13 +58,17 @@ export default function OrdersScreen() {
         const tokenPreview = credentials.accessToken
           ? credentials.accessToken.slice(0, 20) + "..."
           : "VAZIO";
-        const detail = `URL: ${baseUrl}\nToken: ${tokenPreview}\nClient: ${credentials.client || "(vazio)"}\nUID: ${credentials.uid || "(vazio)"}\nErro: ${msg}`;
+        const detail = `URL: ${baseUrl}\nToken: ${tokenPreview}\nErro: ${msg}`;
         setDebugInfo(detail);
         throw err;
       }
     },
     enabled: !!credentials,
-    retry: false,
+    retry: (failureCount, error) => {
+      // Não retry em caso de sessão expirada
+      if (error.message === "SESSION_EXPIRED") return false;
+      return failureCount < 2;
+    },
   });
 
   const handleError = useCallback(async () => {

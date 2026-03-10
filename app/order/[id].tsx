@@ -21,15 +21,15 @@ import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import {
-  fetchServiceOrder,
+  getServiceOrder,
   getRouteName,
   getVoyageName,
   getAddressName,
   getClientName,
   uploadPhoto,
-  type ServiceOrder,
-} from "@/services/api";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+} from "@/services/servicesOrders";
+import type { ServiceOrder } from "@/services/api";
+import { useQuery } from "@tanstack/react-query";
 
 function InfoRow({
   icon,
@@ -74,37 +74,17 @@ export default function OrderDetailScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { credentials, baseUrl } = useAuth();
-  const queryClient = useQueryClient();
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-
-  // Tenta obter os dados do cache primeiro (da lista de OS)
-  // A query key na lista é ["service_orders", filters, baseUrl], então buscamos todas
-  const queryCache = queryClient.getQueryCache();
-  const allQueries = queryCache.findAll(["service_orders"]) as any[];
-
-  // Pega a primeira query encontrada e procura a OS pelo identifier
-  let cachedOrder: ServiceOrder | undefined;
-  for (const query of allQueries) {
-    const orders = query.state.data as ServiceOrder[] | undefined;
-    if (orders) {
-      cachedOrder = orders.find(o => (o.identifier && o.identifier === id) || String(o.id) === id);
-      if (cachedOrder) break;
-    }
-  }
 
   const { data: order, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ["service_order", id, baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      // Se já temos no cache, usa os dados do cache
-      if (cachedOrder) {
-        return cachedOrder;
-      }
-      return fetchServiceOrder({ baseUrl, credentials }, id!);
+      // Busca por identifier (com cache SQLite integrado)
+      return getServiceOrder(id!);
     },
     enabled: !!credentials && !!id,
     retry: false,
-    initialData: cachedOrder, // Usa dados do cache como dados iniciais
   });
 
   const handleAddPhoto = async (source: "camera" | "gallery") => {
@@ -128,7 +108,7 @@ export default function OrderDetailScreen() {
     try {
       await uploadPhoto({ baseUrl, credentials }, order.id, result.assets[0].uri);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: ["service_order", id] });
+      refetch();
       Alert.alert("Foto enviada", "Foto adicionada com sucesso.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Não foi possível enviar a foto.";

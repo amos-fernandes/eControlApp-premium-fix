@@ -1,5 +1,7 @@
 import type { Credentials } from "@/context/AuthContext";
 
+export type { Credentials };
+
 export interface ServiceOrder {
   id: number | string;
   status: string;
@@ -92,6 +94,10 @@ const SERVICE_ORDER_PATHS = [
   "/api/v1/service_orders",     // Fallback para URLs base sem /api
 ];
 
+/**
+ * @deprecated Use getServicesOrders do services/servicesOrders.ts para cache SQLite
+ * Mantido apenas para compatibilidade com código legado
+ */
 export async function fetchServiceOrders(
   config: ApiConfig,
   params?: Record<string, string>
@@ -211,6 +217,10 @@ export async function fetchServiceOrders(
   throw lastError || new Error(`Não foi possível carregar as ordens de ${cleanBase}`);
 }
 
+/**
+ * @deprecated Use getServiceOrder do services/servicesOrders.ts para cache SQLite
+ * Mantido apenas para compatibilidade com código legado
+ */
 export async function fetchServiceOrder(
   config: ApiConfig,
   identifier: string
