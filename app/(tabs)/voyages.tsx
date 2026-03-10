@@ -20,12 +20,12 @@ import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import {
-  fetchServiceOrders,
+  getServicesOrders,
   getRouteName,
   getVoyageName,
   hasVoyage,
   type ServiceOrder,
-} from "@/services/api";
+} from "@/services/servicesOrders";
 import { useQuery } from "@tanstack/react-query";
 
 type Tab = "com" | "sem";
@@ -41,11 +41,22 @@ export default function VoyagesScreen() {
     queryKey: ["service_orders_voyages", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      // Busca todas as OS (sem filtros)
-      return fetchServiceOrders({ baseUrl, credentials });
+      // Busca todas as OS (sem filtros) com cache SQLite
+      return getServicesOrders({
+        filters: {
+          status: "",
+          so_type: "",
+          start_date: "",
+          end_date: "",
+          voyage: "",
+        },
+      });
     },
     enabled: !!credentials,
-    retry: false,
+    retry: (failureCount, error) => {
+      if (error.message === "SESSION_EXPIRED") return false;
+      return failureCount < 2;
+    },
   });
 
   const withVoyage = useMemo(
@@ -200,7 +211,7 @@ export default function VoyagesScreen() {
               <ServiceOrderCard
                 order={item}
                 onPress={() =>
-                  router.push({ pathname: "/order/[id]", params: { id: String(item.id) } })
+                  router.push({ pathname: "/order/[id]", params: { id: item.identifier || String(item.id) } })
                 }
               />
             );

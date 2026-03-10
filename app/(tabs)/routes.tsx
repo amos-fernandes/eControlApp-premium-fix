@@ -18,11 +18,11 @@ import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import {
-  fetchServiceOrders,
+  getServicesOrders,
   getRouteName,
   getVoyageName,
   type ServiceOrder,
-} from "@/services/api";
+} from "@/services/servicesOrders";
 import { useQuery } from "@tanstack/react-query";
 
 export default function RoutesScreen() {
@@ -36,11 +36,22 @@ export default function RoutesScreen() {
     queryKey: ["service_orders_routes", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      // Busca todas as OS (sem filtros)
-      return fetchServiceOrders({ baseUrl, credentials });
+      // Busca todas as OS (sem filtros) com cache SQLite
+      return getServicesOrders({
+        filters: {
+          status: "",
+          so_type: "",
+          start_date: "",
+          end_date: "",
+          voyage: "",
+        },
+      });
     },
     enabled: !!credentials,
-    retry: false,
+    retry: (failureCount, error) => {
+      if (error.message === "SESSION_EXPIRED") return false;
+      return failureCount < 2;
+    },
   });
 
   interface VoyageGroup {
@@ -217,7 +228,7 @@ export default function RoutesScreen() {
                             onPress={() =>
                               router.push({
                                 pathname: "/order/[id]",
-                                params: { id: String(o.id) },
+                                params: { id: o.identifier || String(o.id) },
                               })
                             }
                           />
