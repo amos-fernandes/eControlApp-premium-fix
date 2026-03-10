@@ -1,11 +1,54 @@
-# MEMORIA: eControlApp v1.0 - Documentação Completa
+# MEMORIA: eControlApp - Documentação Completa v1.6.0
 
 ## 📋 Visão Geral
 **eControlApp** - Aplicativo React Native para gestão de ordens de serviço da eControle Pro.
 
-**Data**: 2026-03-06  
-**Versão Atual**: 1.0.0  
-**Status**: ✅ Funcional
+**Data**: 2026-03-10 (Última atualização)  
+**Versão Atual**: 1.6.0  
+**Status**: ✅ Funcional + Cache SQLite  
+**Branch**: `developer`
+
+---
+
+## 🎯 NOVIDADES v1.6.0 (2026-03-10)
+
+### **Fase 1 - Busca por Identifier** ✅
+- **Problema**: OS buscadas por `id` numérico não carregavam corretamente
+- **Solução**: Busca por `identifier` (ex: "OS-12345") via query param
+- **Arquivos**: `services/api.ts`, `app/order/[id].tsx`
+- **API**: `GET /api/service_orders?identifier=OS-12345`
+
+### **Fase 2 - Filtro de 20 Dias** ✅
+- **Problema**: Sem filtro de data padrão
+- **Solução**: Filtro automático para últimos 20 dias (dinâmico)
+- **Arquivos**: `context/FilterContext.tsx`, `components/FilterModal.tsx`
+- **Cálculo**: `startDate = hoje - 20 dias`, `endDate = hoje`
+
+### **Fase 3 - Cache SQLite** ✅
+- **Problema**: Sem modo offline, dados não persistem
+- **Solução**: Cache automático no SQLite com fallback
+- **Arquivos**: 
+  - `services/servicesOrders.ts` (novo - 450 linhas)
+  - `databases/database.ts` (novo - 248 linhas)
+- **Benefícios**:
+  - ✅ Cache automático de todas as OS
+  - ✅ Fallback para cache se API falhar
+  - ✅ Modo offline possível
+  - ✅ Performance melhorada
+
+### **Unificação das Tabs** ✅
+- **Migração**: Todas as tabs usam `getServicesOrders` com cache
+- **Arquivos**: `app/(tabs)/index.tsx`, `voyages.tsx`, `routes.tsx`
+- **Benefício**: Mesma fonte de dados, não quebra navegação
+
+### **Testes Automatizados** ✅
+- **Configuração**: Jest + jest-expo
+- **Arquivos**: `jest.config.js`, `package.json`
+- **Testes**: 34 testes passando
+  - `mtr.test.ts`: 5 testes (I, J, K)
+  - `serviceOrders.test.ts`: 12 testes
+  - `routes.test.ts`: 11 testes
+  - `auth.test.ts`: 6 testes
 
 ---
 
@@ -21,6 +64,160 @@
 - Token transmitido via headers: `access-token`, `client`, `uid`
 - Tratamento de expiração de sessão (401)
 - Logout automático em caso de token expirado
+
+### **Cache de Token (v1.6.0)** 💾
+- **AsyncStorage**: Credenciais completas (`econtrole_credentials`)
+- **AsyncStorage**: URL base (`econtrole_base_url`)
+- **SQLite**: Credenciais backup (tabela `credentials`)
+- **SecureStore**: Domínio/URL (chave `domain`)
+
+**Fluxo de Navegação:**
+```
+Login → Token salvo (AsyncStorage + SQLite)
+  ↓
+Tab Ordens → Usa credentials do AuthContext
+  ↓
+Tab Viagens → Usa MESMAS credentials (não quebra!)
+  ↓
+Tab Rotas → Usa MESMAS credentials (não quebra!)
+  ↓
+Settings → Mostra usuário do cache
+```
+
+✅ **Nenhuma tab quebra a navegação!**
+
+---
+
+## 🗄️ Estrutura do Banco SQLite (v1.6.0)
+
+### **Tabelas Principais**
+
+```sql
+-- Ordens de Serviço
+CREATE TABLE service_orders (
+  id INTEGER PRIMARY KEY,
+  identifier TEXT,           -- Ex: "OS-12345"
+  status TEXT,
+  service_date TEXT,
+  customer_id INTEGER,
+  customer_name TEXT,
+  address_text TEXT,         -- Endereço formatado
+  observations TEXT,
+  driver_observations TEXT,
+  created_at TEXT,
+  vehicle_info TEXT,         -- JSON
+  voyage_info TEXT           -- JSON
+);
+
+-- Execuções de Serviço (itens da OS)
+CREATE TABLE service_executions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_order_id INTEGER,  -- FK → service_orders.id
+  service_name TEXT,
+  amount INTEGER,
+  unit_name TEXT,
+  item_weights TEXT          -- JSON dos pesos
+);
+
+-- Credenciais de Autenticação
+CREATE TABLE credentials (
+  _id TEXT PRIMARY KEY,
+  accessToken TEXT,
+  uid TEXT,
+  client TEXT,
+  created_at TEXT
+);
+
+-- Usuários
+CREATE TABLE users (
+  _id TEXT PRIMARY KEY,
+  email TEXT,
+  name TEXT,
+  created_at TEXT
+);
+
+-- MTRs Emitidos
+CREATE TABLE mtrs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_order_id INTEGER,  -- FK → service_orders.id
+  mtr_id TEXT UNIQUE,
+  status TEXT,
+  emission_date TEXT,
+  download_path TEXT,
+  created_at TEXT
+);
+
+-- Fotos da OS
+CREATE TABLE service_order_images (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  service_order_id INTEGER,  -- FK → service_orders.id
+  image_url TEXT,
+  image_path TEXT,
+  created_at TEXT
+);
+```
+
+### **Funções CRUD (databases/database.ts)**
+
+```typescript
+// Credenciais
+insertCredentials(cred)
+getCredentials()
+
+// Usuários
+insertUser(user)
+
+// Ordens de Serviço
+insertServiceOrder(order)        // Salva OS + execuções (transação)
+getServiceOrders()               // Todas as OS
+getServiceOrder(id)              // OS específica por ID
+
+// MTRs
+insertMTR(serviceOrderId, mtrId, status)
+getMTRsByServiceOrder(serviceOrderId)
+getMTRById(mtrId)
+updateMTRStatus(mtrId, status)
+
+// Fotos
+insertServiceOrderImage(serviceOrderId, imageUrl, imagePath)
+getServiceOrderImages(serviceOrderId)
+deleteServiceOrderImages(serviceOrderId)
+
+// Utilitários
+clearDatabase()                  // Limpa tudo
+initDatabase()                   // Cria tabelas
+```
+
+### **Serviço Unificado (services/servicesOrders.ts)**
+
+```typescript
+// Busca OS da API + cache automático
+getServicesOrders({ filters })
+  → API → SQLite → Retorna dados
+  → Se API falha → SQLite (fallback)
+
+// Busca OS específica por identifier
+getServiceOrder(identifier)
+  → SQLite (cache) → Retorna
+  → Se não existe → API → SQLite → Retorna
+
+// Funções auxiliares
+getServiceOrdersFromCache()
+getServiceOrderFromCacheByIdentifier(identifier)
+getServiceOrderFromCacheById(id)
+clearServiceOrdersCache()
+isCacheEmpty()
+
+// Helpers de exibição
+getClientName(order)
+getAddressName(order)
+getRouteName(order)
+getVoyageName(order)
+hasVoyage(order)
+
+// Upload
+uploadPhoto(config, orderId, uri)
+```
 
 ---
 
@@ -395,6 +592,213 @@ Response: { mtr_id, numero_mtr, status, pdf_url }
 
 ---
 
+## 🆕 Histórico de Atualizações Recentes
+
+### v1.6.0 - Cache SQLite + Identifier + 20 Dias (2026-03-10)
+
+**Branch**: `developer`  
+**Commits**: 6  
+**Status**: ✅ Testado (34 testes passando)
+
+#### **Fase 1 - Busca por Identifier** ✅
+**Problema**: OS buscadas por `id` numérico não carregavam corretamente, trazendo apenas algumas OS.
+
+**Solução**:
+- `services/api.ts`: `fetchServiceOrder()` agora busca por `identifier` via query param
+- API: `GET /api/service_orders?identifier=OS-12345`
+- `app/order/[id].tsx`: Navegação usa `identifier` como chave principal (fallback para `id`)
+- Display: "OS OS-12345" ou "#0001" se não tiver identifier
+
+**Arquivos Modificados**:
+- `services/api.ts` - Busca por identifier
+- `app/(tabs)/index.tsx` - Navegação passa identifier
+- `app/order/[id].tsx` - Busca por identifier
+
+---
+
+#### **Fase 2 - Filtro de 20 Dias** ✅
+**Problema**: Sem filtro de data padrão, OS não carregavam corretamente.
+
+**Solução**:
+- `context/FilterContext.tsx`: Filtro padrão `startDate` e `endDate` (últimos 20 dias)
+- Cálculo dinâmico: `startDate = hoje - 20 dias`, `endDate = hoje`
+- `components/FilterModal.tsx`: Reset mantém filtro de 20 dias
+- `app/(tabs)/index.tsx`: Envia `start_date` e `end_date` na requisição
+
+**Arquivos Modificados**:
+- `context/FilterContext.tsx` - Filtro padrão 20 dias
+- `components/FilterModal.tsx` - Reset mantém 20 dias
+- `app/(tabs)/index.tsx` - Envia datas na API
+
+---
+
+#### **Fase 3 - Cache SQLite** ✅
+**Problema**: Sem modo offline, dados não persistiam, navegação entre tabs quebrava.
+
+**Solução**:
+- `services/servicesOrders.ts`: Novo serviço unificado (450 linhas)
+  - `getServicesOrders()`: Busca API + cache automático no SQLite
+  - `getServiceOrder(identifier)`: Busca por identifier com cache integrado
+  - Fallback automático para cache se API falhar
+  - Funções auxiliares: `getClientName`, `getAddressName`, etc.
+  - `uploadPhoto()`: Upload de fotos para OS
+
+- `databases/database.ts`: Esquema SQLite completo (248 linhas)
+  - Tabelas: `service_orders`, `service_executions`, `credentials`, `users`, `mtrs`
+  - Funções CRUD para persistência local
+  - Suporte a modo offline
+
+- **Migração das Tabs**:
+  - `app/(tabs)/index.tsx` - Usa `getServicesOrders`
+  - `app/(tabs)/voyages.tsx` - Usa `getServicesOrders`
+  - `app/(tabs)/routes.tsx` - Usa `getServicesOrders`
+  - Navegação usa `identifier` (fallback para `id`)
+
+**Benefícios**:
+- ✅ Cache automático de todas as OS
+- ✅ Modo offline possível (fallback para cache)
+- ✅ Arquitetura mais robusta e escalável
+- ✅ Performance melhorada (dados locais)
+- ✅ Mesma fonte de dados em todas as tabs (não quebra navegação)
+
+**Arquivos Criados**:
+- `services/servicesOrders.ts` (novo)
+- `databases/database.ts` (novo)
+
+**Arquivos Modificados**:
+- `app/(tabs)/index.tsx`
+- `app/(tabs)/voyages.tsx`
+- `app/(tabs)/routes.tsx`
+- `app/order/[id].tsx`
+- `services/api.ts` - Marcação @deprecated
+
+---
+
+#### **Testes Automatizados** ✅
+**Configuração**: Jest + jest-expo
+
+**Arquivos**:
+- `jest.config.js` - Configuração Jest
+- `package.json` - Scripts e dependências
+- `temp-repo/__tests__/setup.ts` - Mocks
+
+**Testes Disponíveis**:
+- `mtr.test.ts`: 5 testes (I, J, K - MTR helpers)
+- `serviceOrders.test.ts`: 12 testes (Filtros, OS, Equipamentos)
+- `routes.test.ts`: 11 testes (Rotas, Viagens)
+- `auth.test.ts`: 6 testes (Autenticação, Login)
+
+**Total**: 34 testes passando ✅
+
+**Comandos**:
+```bash
+npm test              # Roda todos os testes
+npm run test:watch    # Modo watch
+npm run test:coverage # Com coverage
+```
+
+**Arquivos Modificados**:
+- `jest.config.js` (novo)
+- `package.json` - Scripts + devDependencies
+
+---
+
+### v1.5 - QRScanner com Base64 (2026-03-06)
+**Problema**: QR Code continha apenas subdomínio em Base64 (`Z3NhbWJpZW50YWlz` = `gsambientais`)
+
+**Solução**:
+- Adicionado decodificador Base64 no `parseQR()`
+- Detecta automaticamente subdomínio em Base64
+- Configura URL do servidor: `https://{subdomain}.econtrole.com/api`
+- Redireciona para tela de login após configurar URL
+
+**Fluxo QRScanner Atualizado**:
+```
+QR Code (Base64)
+    ↓
+Decodifica → "gsambientais"
+    ↓
+Configura URL → https://gsambientais.econtrole.com/api
+    ↓
+Tela de Login (email/senha)
+    ↓
+Login normal
+```
+
+**Arquivos Modificados**:
+- `app/qrscanner.tsx`: Adicionado `atobPolyfill`, `parseQR` atualizado, handler de subdomain
+
+---
+
+## 💎 Perfil do Assistente (Ed)
+
+**Identidade**: Giga Potato  
+**Especialidades**:
+- React Native (Ph.D.)
+- TypeScript
+- Node.js
+- Expo CLI
+- Java
+
+**Missão**: Corrigir bugs e implementar funcionalidades no eControlApp
+
+**Estilo de Trabalho**:
+- ✅ Respostas diretas e práticas
+- ✅ Código bem documentado
+- ✅ Logs de debug para troubleshooting
+- ✅ Soluções testadas antes de entregar
+- ✅ Foco em UX do usuário final
+
+**Conquistas**:
+- 🏆 Correção de autenticação 401
+- 🏆 Parse JSON de respostas HTML
+- 🏆 Tratamento de valores null/undefined
+- 🏆 Sistema de coleta e conferência
+- 🏆 Integração Google Maps
+- 🏆 QRScanner com Base64
+- 🏆 Filtros avançados com datas
+
+---
+
+## 📞 Suporte e Contexto
+
+### Contexto da Conversa
+- **Usuário**: Ed (desenvolvedor do eControlApp)
+- **Projeto**: eControlApp-premium-fix
+- **Objetivo**: App funcional para motoristas coletarem resíduos
+- **API**: eControle Pro (Devise Token Auth)
+- **Ambiente**: Linux, Expo SDK 54
+
+### Como Continuar
+1. Leia este arquivo MEMORIA-v1.md
+2. Verifique logs do terminal se houver erros
+3. Teste no dispositivo/emulador
+4. Reporte issues com logs completos
+
+### Comandos Úteis
+```bash
+# Desenvolvimento
+npx expo start
+
+# Build APK (EAS)
+eas build --platform android --profile preview
+
+# Build local (requer Android Studio)
+npx expo run:android --variant release
+
+# Instalar dependências
+npx expo install <package>
+```
+
+---
+
+**Última Atualização**: 2026-03-10  
+**Versão**: 1.6.0  
+**Status**: ✅ Desenvolvimento (branch `developer`)  
+**Próximo Release**: v1.6.0 (merge para master após testes)
+
+---
+
 ## 📞 Suporte
 
 ### Logs de Debug
@@ -403,6 +807,7 @@ Ative logs no terminal para ver:
 - Estrutura das respostas API
 - Erros de autenticação
 - Filtros aplicados
+- Cache SQLite (logs: `getServicesOrders: Caching orders...`)
 
 ### Como Reportar Bugs
 1. Descreva o passo a passo para reproduzir
@@ -410,8 +815,86 @@ Ative logs no terminal para ver:
 3. Informe versão do app
 4. Anexe screenshots se aplicável
 
+### Checklist de Testes
+Ver arquivo `TESTES.md` para checklist completo de testes manuais.
+
 ---
 
-**Última Atualização**: 2026-03-06  
-**Versão**: 1.0.0  
-**Status**: ✅ Produção
+## 🚀 Comandos Úteis (v1.6.0)
+
+```bash
+# Desenvolvimento
+npx expo start
+
+# Testes
+npm test                 # Roda todos os testes
+npm run test:watch       # Modo watch
+npm run test:coverage    # Com relatório de coverage
+
+# Build APK (EAS)
+eas build --platform android --profile preview
+
+# Build local (requer Android Studio)
+npx expo run:android --variant release
+
+# Instalar dependências
+npx expo install <package>
+npm install --save-dev <package>
+```
+
+---
+
+## 📊 Resumo da v1.6.0
+
+| Feature | Status | Descrição |
+|---------|--------|-----------|
+| **Fase 1** | ✅ | Busca OS por `identifier` |
+| **Fase 2** | ✅ | Filtro padrão 20 dias |
+| **Fase 3** | ✅ | Cache SQLite unificado |
+| **Tabs** | ✅ | Todas migradas para cache |
+| **Auth** | ✅ | Token persistente (AsyncStorage + SQLite) |
+| **Testes** | ✅ | 34 testes passando |
+
+**Commits na branch `developer`**:
+```
+0a2cdad chore: atualizar jest.config e rodar testes
+4904437 chore: adicionar configuração do Jest para testes
+8393388 feat: migrar tabs Viagens e Rotas para cache SQLite
+24be858 feat: unificação com cache SQLite (Fase 3)
+20f46eb feat: buscar OS por identifier e filtro padrão de 20 dias
+fd13453 (origin/master) First commit
+```
+
+---
+
+**Última Atualização**: 2026-03-10  
+**Versão**: 1.6.0  
+**Status**: ✅ Desenvolvimento (branch `developer`)  
+**Próximo Release**: v1.6.0 (merge para master após testes)
+
+---
+
+## 📞 Suporte
+
+### Logs de Debug
+Ative logs no terminal para ver:
+- URLs das requisições
+- Estrutura das respostas API
+- Erros de autenticação
+- Filtros aplicados
+- Cache SQLite (logs: `getServicesOrders: Caching orders...`)
+
+### Como Reportar Bugs
+1. Descreva o passo a passo para reproduzir
+2. Inclua logs do terminal
+3. Informe versão do app
+4. Anexe screenshots se aplicável
+
+### Checklist de Testes
+Ver arquivo `TESTES.md` para checklist completo de testes manuais.
+
+---
+
+**Última Atualização**: 2026-03-10  
+**Versão**: 1.6.0  
+**Status**: ✅ Desenvolvimento (branch `developer`)
