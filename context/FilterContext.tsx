@@ -17,12 +17,23 @@ export interface ServiceOrderFilters {
   search: string;
 }
 
+// Helper para calcular datas
+function getDateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().split("T")[0]; // YYYY-MM-DD
+}
+
+function getTodayDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 const defaultFilters: ServiceOrderFilters = {
   status: "",
   type: "",
   hasVoyage: "",
-  startDate: "",
-  endDate: "",
+  startDate: getDateDaysAgo(20), // Últimos 20 dias
+  endDate: getTodayDate(),
   routeName: "",
   search: "",
 };
@@ -47,7 +58,15 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   );
 
   const resetFilters = useCallback(() => {
-    setFilters(defaultFilters);
+    setFilters({
+      status: "",
+      type: "",
+      hasVoyage: "",
+      startDate: getDateDaysAgo(20),
+      endDate: getTodayDate(),
+      routeName: "",
+      search: "",
+    });
   }, []);
 
   const hasActiveFilters = useMemo(

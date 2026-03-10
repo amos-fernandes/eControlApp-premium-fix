@@ -37,6 +37,7 @@ export default function OrdersScreen() {
   if (filters.status) queryParams.status = filters.status;
   if (filters.type) queryParams.so_type = filters.type;   // API usa so_type
   if (filters.routeName) queryParams.route_name = filters.routeName;
+  // Filtros de data (últimos 20 dias por padrão)
   if (filters.startDate) queryParams.start_date = filters.startDate;
   if (filters.endDate) queryParams.end_date = filters.endDate;
 
@@ -170,14 +171,14 @@ export default function OrdersScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(o, index) => {
-            // Garante chave única mesmo se id for undefined
-            const id = o?.id;
-            return id ? String(id) : `item-${index}`;
+            // Garante chave única usando identifier ou id como fallback
+            const identifier = o?.identifier || o?.id;
+            return identifier ? String(identifier) : `item-${index}`;
           }}
           renderItem={({ item }) => (
             <ServiceOrderCard
               order={item}
-              onPress={() => router.push({ pathname: "/order/[id]", params: { id: String(item.id) } })}
+              onPress={() => router.push({ pathname: "/order/[id]", params: { id: item.identifier || String(item.id) } })}
             />
           )}
           contentContainerStyle={[styles.list, filtered.length === 0 && styles.listEmpty]}

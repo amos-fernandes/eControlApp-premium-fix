@@ -1,6 +1,7 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -69,7 +70,7 @@ function Section({
 }
 
 export default function OrderDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>(); // id agora é o identifier
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { credentials, baseUrl } = useAuth();
@@ -79,14 +80,14 @@ export default function OrderDetailScreen() {
   // Tenta obter os dados do cache primeiro (da lista de OS)
   // A query key na lista é ["service_orders", filters, baseUrl], então buscamos todas
   const queryCache = queryClient.getQueryCache();
-  const allQueries = queryCache.findAll(["service_orders"]);
+  const allQueries = queryCache.findAll(["service_orders"]) as any[];
 
-  // Pega a primeira query encontrada e procura a OS pelo ID
+  // Pega a primeira query encontrada e procura a OS pelo identifier
   let cachedOrder: ServiceOrder | undefined;
   for (const query of allQueries) {
     const orders = query.state.data as ServiceOrder[] | undefined;
     if (orders) {
-      cachedOrder = orders.find(o => String(o.id) === id);
+      cachedOrder = orders.find(o => (o.identifier && o.identifier === id) || String(o.id) === id);
       if (cachedOrder) break;
     }
   }
@@ -198,7 +199,7 @@ export default function OrderDetailScreen() {
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={[styles.headerOS, { color: theme.textMuted }]}>
-              OS #{String(order.id).padStart(4, "0")}
+              OS {order.identifier || `#${String(order.id).padStart(4, "0")}`}
             </Text>
             <StatusBadge status={order.status} small />
           </View>

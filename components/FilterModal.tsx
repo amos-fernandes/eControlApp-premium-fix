@@ -124,17 +124,27 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
   };
 
   const handleReset = () => {
-    const empty: ServiceOrderFilters = {
+    // Helper para calcular datas
+    const getDateDaysAgo = (days: number): string => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      return date.toISOString().split("T")[0];
+    };
+    const getTodayDate = (): string => {
+      return new Date().toISOString().split("T")[0];
+    };
+
+    const resetFilters: ServiceOrderFilters = {
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: "",
-      endDate: "",
+      startDate: getDateDaysAgo(20), // Últimos 20 dias
+      endDate: getTodayDate(),
       routeName: "",
       search: "",
     };
-    setLocal(empty);
-    onApply(empty);
+    setLocal(resetFilters);
+    onApply(resetFilters);
     onClose();
   };
 

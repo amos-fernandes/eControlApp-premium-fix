@@ -213,29 +213,26 @@ export async function fetchServiceOrders(
 
 export async function fetchServiceOrder(
   config: ApiConfig,
-  id: string | number
+  identifier: string
 ): Promise<ServiceOrder> {
   const cleanBase = config.baseUrl.replace(/\/$/, "");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    // Tenta primeiro /api/v1/service_orders (API REST)
-    let response = await fetch(`${cleanBase}/api/v1/service_orders/${id}`, {
+    // Busca por identifier via query param (padrão eControle Pro)
+    // Ex: /api/service_orders?identifier=OS-12345
+    const url = new URL(`${cleanBase}/api/service_orders`);
+    url.searchParams.set("identifier", identifier);
+
+    const response = await fetch(url.toString(), {
       headers: buildHeaders(config.credentials),
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
     if (response.status === 404) {
-      // Fallback: tenta endpoint sem versão
-      const controller2 = new AbortController();
-      const timeout2 = setTimeout(() => controller2.abort(), 15000);
-      response = await fetch(`${cleanBase}/api/service_orders/${id}`, {
-        headers: buildHeaders(config.credentials),
-        signal: controller2.signal,
-      });
-      clearTimeout(timeout2);
+      throw new Error(`OS não encontrada: ${identifier}`);
     }
 
     if (response.status === 401) throw new Error("SESSION_EXPIRED");
@@ -249,7 +246,25 @@ export async function fetchServiceOrder(
     }
 
     const data = await response.json();
-    const result = data?.data || data;
+    
+    // Handle various API response shapes
+    let result: ServiceOrder | null = null;
+    if (Array.isArray(data?.items) && data.items.length > 0) {
+      result = data.items[0];
+    } else if (Array.isArray(data?.data) && data.data.length > 0) {
+      result = data.data[0];
+    } else if (Array.isArray(data) && data.length > 0) {
+      result = data[0];
+    } else if (data?.data) {
+      result = data.data;
+    } else {
+      result = data;
+    }
+
+    if (!result) {
+      throw new Error(`OS não encontrada: ${identifier}`);
+    }
+
     return result;
   } catch (err) {
     clearTimeout(timeout);
