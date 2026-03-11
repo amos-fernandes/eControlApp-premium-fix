@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +23,7 @@ import { useAuth } from "@/context/AuthContext";
 const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
 const DEFAULT_EMAIL = "motoristaapp@econtrole.com";
 const DEFAULT_PASSWORD = "ecomotoapp";
+const CREDENTIALS_KEY = "econtrole_credentials";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -67,6 +70,45 @@ export default function LoginScreen() {
     setConnectionStatus(result);
     setIsTesting(false);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleClearData = async () => {
+    Alert.alert(
+      "Limpar Dados Salvos",
+      "Isso vai remover todas as credenciais salvas (AsyncStorage e SQLite) e reiniciar o app. Tem certeza?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Limpar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Limpa AsyncStorage
+              await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
+              
+              // Limpa SQLite
+              const { getDB } = require("@/databases/database");
+              const db = getDB();
+              db.runSync('DELETE FROM credentials');
+              db.runSync('DELETE FROM users');
+              
+              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert("Sucesso", "Dados limpos! O app será recarregado.", [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    router.replace("/");
+                  }
+                }
+              ]);
+            } catch (e) {
+              console.error("Error clearing data:", e);
+              Alert.alert("Erro", "Não foi possível limpar os dados.");
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -211,6 +253,19 @@ export default function LoginScreen() {
                   )}
                   <Text style={styles.testBtnText}>
                     {isTesting ? "Testando..." : "Testar conexão"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.testBtn,
+                    { borderColor: "#EF4444" }
+                  ]}
+                  onPress={handleClearData}
+                >
+                  <Feather name="trash-2" size={14} color="#EF4444" />
+                  <Text style={[styles.testBtnText, { color: "#EF4444" }]}>
+                    Limpar dados salvos
                   </Text>
                 </Pressable>
 

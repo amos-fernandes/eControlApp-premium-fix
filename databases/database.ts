@@ -179,6 +179,52 @@ export const insertServiceOrder = (order: any) => {
 }
 
 /**
+ * Insere uma Ordem de Servico SEM transação (para uso em batch).
+ * Usado apenas dentro de transações externas.
+ */
+export const insertServiceOrderNoTransaction = (order: any, db: any) => {
+    db.runSync(
+        `INSERT OR REPLACE INTO service_orders (
+        id, identifier, status, service_date, customer_id, customer_name,
+        address_text, observations, driver_observations, created_at, vehicle_info, voyage_info
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            order.id,
+            order.identifier,
+            order.status,
+            order.service_date,
+            order.customer_id,
+            order.customer?.name,
+            order.address?.to_s || order.address?.name,
+            order.observations,
+            order.driver_observations,
+            order.created_at,
+            order.vehicle ? JSON.stringify(order.vehicle) : null,
+            order.voyage ? JSON.stringify(order.voyage) : null,
+        ],
+    )
+
+    db.runSync('DELETE FROM service_executions WHERE service_order_id = ?', [order.id])
+
+    if (Array.isArray(order.service_executions)) {
+        order.service_executions.forEach((exec: any) => {
+            db.runSync(
+                `INSERT INTO service_executions (
+            service_order_id, service_name, amount, unit_name, item_weights
+          ) VALUES (?, ?, ?, ?, ?)`,
+                [
+                    order.id,
+                    exec.service?.name,
+                    exec.amount,
+                    exec.unit?.name,
+                    exec.service_item_weights ? JSON.stringify(exec.service_item_weights) : null,
+                ],
+            )
+        })
+    }
+}
+
+/**
  * Retorna todas as Ordens de Servico armazenadas localmente.
  */
 export const getServiceOrders = () => {

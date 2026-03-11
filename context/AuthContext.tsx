@@ -9,6 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
+import { insertCredentials, insertUser } from "@/databases/database";
 
 export interface Credentials {
   accessToken: string;
@@ -179,22 +180,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log("[AuthContext] Loaded storedCreds:", storedCreds ? "EXISTS" : "NULL");
         console.log("[AuthContext] Loaded storedUrl:", storedUrl);
         
+        // Tenta primeiro AsyncStorage
         if (storedCreds) {
           try {
             const parsed = JSON.parse(storedCreds);
-            // Valida se tem accessToken válido
-            if (parsed.accessToken && parsed.accessToken.length > 10) {
-              console.log("[AuthContext] Valid credentials found");
+            console.log("[AuthContext] Parsed credentials:", {
+              hasToken: !!parsed.accessToken,
+              hasClient: !!parsed.client,
+              hasUid: !!parsed.uid,
+              tokenLength: parsed.accessToken?.length
+            });
+            
+            // Valida se tem TODOS os campos necessários
+            if (parsed.accessToken && parsed.accessToken.length > 10 && 
+                parsed.client && parsed.uid) {
+              console.log("[AuthContext] Valid credentials found in AsyncStorage");
               setCredentials(parsed);
             } else {
-              console.log("[AuthContext] Invalid credentials - clearing");
-              await AsyncStorage.removeItem(CREDENTIALS_KEY);
+              console.log("[AuthContext] Incomplete credentials in AsyncStorage - trying SQLite");
             }
           } catch (e) {
-            console.log("[AuthContext] Corrupted credentials - clearing");
-            await AsyncStorage.removeItem(CREDENTIALS_KEY);
+            console.log("[AuthContext] Corrupted credentials in AsyncStorage - trying SQLite", e);
           }
         }
+        
+        // Fallback: Tenta buscar do SQLite
+        if (!credentials) {
+          try {
+            const { getCredentials } = require("@/databases/database");
+            const sqliteCreds = getCredentials();
+            console.log("[AuthContext] SQLite credentials:", sqliteCreds);
+            
+            if (sqliteCreds && sqliteCreds.accessToken) {
+              const credsFromSQLite: Credentials = {
+                accessToken: sqliteCreds.accessToken,
+                client: sqliteCreds.client || '',
+                uid: sqliteCreds.uid || '',
+                email: undefined,
+              };
+              console.log("[AuthContext] Valid credentials found in SQLite");
+              setCredentials(credsFromSQLite);
+            }
+          } catch (e) {
+            console.log("[AuthContext] No credentials in SQLite:", e);
+          }
+        }
+        
         if (storedUrl) {
           let cleanUrl = storedUrl.replace(/\/$/, "");
           if (!cleanUrl.endsWith("/api")) {
@@ -227,6 +258,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithCredentials = useCallback(async (creds: Credentials) => {
     setCredentials(creds);
     await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
+    // Salva também no SQLite para persistência
+    try {
+      insertCredentials({
+        _id: 'main',
+        accessToken: creds.accessToken,
+        uid: creds.uid,
+        client: creds.client,
+      });
+      if (creds.email) {
+        insertUser({
+          _id: creds.uid || 'main',
+          email: creds.email,
+          name: creds.email.split('@')[0],
+        });
+      }
+      console.log("[AuthContext] Credentials saved to SQLite");
+    } catch (e) {
+      console.error("[AuthContext] Failed to save credentials to SQLite:", e);
+    }
   }, []);
 
   const login = useCallback(
@@ -245,6 +295,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCredentials(creds);
       setBaseUrlState(apiBaseUrl.replace(/\/$/, ""));
       baseUrlRef.current = apiBaseUrl.replace(/\/$/, "");
+      
+      // Salva também no SQLite para persistência
+      try {
+        insertCredentials({
+          _id: 'main',
+          accessToken,
+          uid: uid || email,
+          client,
+        });
+        insertUser({
+          _id: uid || email,
+          email,
+          name: email.split('@')[0],
+        });
+        console.log("[AuthContext] Login successful - credentials saved to SQLite");
+      } catch (e) {
+        console.error("[AuthContext] Failed to save credentials to SQLite:", e);
+      }
     },
     []
   );
@@ -252,6 +320,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setCredentials(null);
     await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
+    // Limpa também do SQLite
+    try {
+      const db = require("@/databases/database").getDB();
+      db.runSync('DELETE FROM credentials');
+      db.runSync('DELETE FROM users');
+      console.log("[AuthContext] Credentials cleared from SQLite");
+    } catch (e) {
+      console.error("[AuthContext] Failed to clear credentials from SQLite:", e);
+    }
     // Keep baseUrl so user doesn't have to re-enter server URL
   }, []);
 

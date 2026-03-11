@@ -1,4 +1,4 @@
-import { getDB, getCredentials, insertServiceOrder, getServiceOrders, getServiceOrder as getDBServiceOrder } from "@/databases/database";
+import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransaction, getServiceOrders, getServiceOrder as getDBServiceOrder } from "@/databases/database";
 import { retrieveDomain } from "./retrieveUserSession";
 import type { ServiceOrder, ServiceExecution } from "./api";
 import type { Credentials } from "@/context/AuthContext";
@@ -114,7 +114,7 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       db.withTransactionSync(() => {
         orders.forEach((order) => {
           try {
-            insertServiceOrder(order);
+            insertServiceOrderNoTransaction(order, db);
           } catch (err) {
             console.error("getServicesOrders: Error caching order", order.id, err);
           }
