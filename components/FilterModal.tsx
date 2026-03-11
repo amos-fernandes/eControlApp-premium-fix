@@ -24,6 +24,7 @@ interface FilterModalProps {
 
 const STATUS_OPTIONS = [
   { label: "Todos", value: "" },
+  { label: "Pendente", value: "Pendente" },
   { label: "Em Conferência", value: "Em conferência" },
   { label: "Iniciada", value: "Iniciada" },
   { label: "Concluída", value: "Concluída" },

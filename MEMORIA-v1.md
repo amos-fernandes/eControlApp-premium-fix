@@ -867,10 +867,139 @@ fd13453 (origin/master) First commit
 
 ---
 
-**Última Atualização**: 2026-03-10  
-**Versão**: 1.6.0  
+**Última Atualização**: 2026-03-11
+**Versão**: 1.6.1
+**Status**: ✅ Desenvolvimento (branch `developer`)
+**Próximo Release**: v1.6.1 (merge para master após testes)
+
+---
+
+## 🆕 v1.6.1 - Correção de Sessão e Cache SQLite (2026-03-11)
+
+### **Problemas Corrigidos**
+
+1. **App não abria** - Credenciais não persistiam no SQLite
+2. **SESSION_EXPIRED** - Token expirando rapidamente
+3. **Transação aninhada** - Erro ao salvar cache
+4. **Status "Pendente"** - Faltando na lista de filtros
+5. **Identifier na OS** - Mostrando apenas ID numérico
+
+### **Soluções Implementadas**
+
+#### 1. **Credenciais no SQLite** ✅
+- `AuthContext`: Salva credenciais no SQLite ao fazer login
+- `insertCredentials()` e `insertUser()` chamados no login
+- `logout()` limpa SQLite
+- Fallback: AsyncStorage → SQLite
+
+#### 2. **Botão "Limpar Dados Salvos"** ✅
+- Tela de login → Configurações avançadas
+- Limpa AsyncStorage + SQLite
+- Recarrega app automaticamente
+
+#### 3. **Correção de Transação** ✅
+- `insertServiceOrderNoTransaction()`: Versão sem transação
+- Usada dentro de `withTransactionSync` externo
+- Corrige: "cannot start a transaction within a transaction"
+
+#### 4. **Tratamento SESSION_EXPIRED** ✅
+- `index.tsx`: Logout automático + redirect para login
+- `update.tsx`: Alerta de sessão expirada na coleta
+- Logs de debug melhorados
+
+#### 5. **Identifier no Card** ✅
+- `ServiceOrderCard.tsx`: Mostra `identifier` ou ID formatado
+- Ex: "OS-12345" ou "#0001"
+
+#### 6. **Status "Pendente"** ✅
+- `FilterModal.tsx`: Adicionado aos filtros
+- `StatusBadge.tsx`: Já suportava "Pendente"
+
+### **Arquivos Modificados**
+
+1. `context/AuthContext.tsx` - Salva/busca SQLite
+2. `app/(auth)/login.tsx` - Botão limpar dados
+3. `databases/database.ts` - `insertServiceOrderNoTransaction`
+4. `services/servicesOrders.ts` - Cache sem transação aninhada
+5. `app/order/update.tsx` - Tratamento SESSION_EXPIRED
+6. `components/ServiceOrderCard.tsx` - Identifier
+7. `components/FilterModal.tsx` - Status "Pendente"
+
+### **Comandos Úteis**
+
+```bash
+# Desenvolvimento
+npx expo start
+
+# Build APK (EAS)
+eas build --platform android --profile preview
+
+# Limpar dados do app (se necessário)
+# No dispositivo: Settings → Apps → eControle → Clear Data
+```
+
+### **Status dos Status da API**
+
+A API retorna os seguintes status:
+- `Pendente` - OS aguardando início
+- `Em conferência` - OS em conferência
+- `Iniciada` - Coleta iniciada
+- `Concluída` - OS finalizada
+- `Cancelada` - OS cancelada
+
+### **Próximos Passos**
+
+- [ ] Implementar paginação "Carregar mais"
+- [ ] Refresh automático de token
+- [ ] Persistência de dados da coleta
+- [ ] Validação de campos obrigatórios
+
+---
+
+## 📞 Suporte
+
+### Logs de Debug
+Ative logs no terminal para ver:
+- URLs das requisições
+- Estrutura das respostas API
+- Erros de autenticação (SESSION_EXPIRED)
+- Filtros aplicados
+- Cache SQLite (logs: `getServicesOrders: Caching orders...`)
+- Distribuição de status (logs: `Status distribution:`)
+
+### Como Reportar Bugs
+1. Descreva o passo a passo para reproduzir
+2. Inclua logs do terminal
+3. Informe versão do app
+4. Anexe screenshots se aplicável
+
+### Checklist de Testes
+- [x] Login com credenciais válidas
+- [x] Credenciais salvas no SQLite
+- [x] Carregamento da lista de OS
+- [x] Filtro por status (Pendente, Em conferência, etc.)
+- [x] Filtro por tipo (Coleta, Entrega)
+- [x] Filtro por viagem
+- [x] Busca local funciona
+- [x] Detalhes da OS abre
+- [x] Iniciar Coleta abre tela
+- [ ] Preencher pesos e enviar (teste pendente)
+- [ ] Selecionar equipamentos funciona
+- [ ] Abrir mapa funciona
+- [ ] Emitir MTR funciona
+- [ ] Enviar para conferência (teste pendente)
+- [x] Viagens agrupam corretamente
+- [x] Rotas agrupam corretamente
+- [x] Logout funciona
+- [x] Re-login funciona
+- [x] Limpar dados salvos funciona
+
+---
+
+**Última Atualização**: 2026-03-11  
+**Versão**: 1.6.1  
 **Status**: ✅ Desenvolvimento (branch `developer`)  
-**Próximo Release**: v1.6.0 (merge para master após testes)
+**Próximo Release**: v1.6.1 (merge para master após testes)
 
 ---
 

@@ -77,11 +77,13 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     clearTimeout(timeout);
 
     if (response.status === 401) {
+      console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
       throw new Error("SESSION_EXPIRED");
     }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
+      console.error(`getServicesOrders: API error ${response.status}:`, errorText.slice(0, 200));
       throw new Error(`Erro ao buscar OS: ${response.status} - ${errorText.slice(0, 100)}`);
     }
 
@@ -106,6 +108,14 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     }
 
     console.log(`getServicesOrders: Received ${orders.length} orders from API`);
+    
+    // Log dos status recebidos para debug
+    const statusCount: Record<string, number> = {};
+    orders.forEach((o: any) => {
+      const s = o.status || 'unknown';
+      statusCount[s] = (statusCount[s] || 0) + 1;
+    });
+    console.log("getServicesOrders: Status distribution:", statusCount);
 
     // Salva no cache SQLite
     if (orders.length > 0) {

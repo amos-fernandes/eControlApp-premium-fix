@@ -283,8 +283,26 @@ export default function UpdateOrderScreen() {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao enviar para conferência";
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert("Erro", msg);
+      
+      // Verifica se é sessão expirada
+      if (msg === "SESSION_EXPIRED") {
+        Alert.alert(
+          "Sessão Expirada",
+          "Sua sessão expirou. Faça login novamente.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                logout();
+                router.replace("/(auth)/login");
+              }
+            }
+          ]
+        );
+      } else {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        Alert.alert("Erro", msg);
+      }
     } finally {
       setIsSubmitting(false);
     }

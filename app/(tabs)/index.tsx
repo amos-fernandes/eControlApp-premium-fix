@@ -73,17 +73,19 @@ export default function OrdersScreen() {
 
   const handleError = useCallback(async () => {
     if (error instanceof Error && error.message === "SESSION_EXPIRED") {
+      console.log("[IndexScreen] SESSION_EXPIRED - Logging out...");
       await logout();
       router.replace("/(auth)/login");
     }
-  }, [error, logout]);
+  }, [error, logout, router]);
 
   // Usar useEffect para chamar handleError depois do render
   useEffect(() => {
     if (isError) {
+      console.log("[IndexScreen] Error detected:", error?.message);
       handleError();
     }
-  }, [isError, handleError]);
+  }, [isError, error, handleError]);
 
   const filtered = (data || []).filter((o: ServiceOrder | null | undefined) => {
     if (!o) return false; // Filtra valores null/undefined

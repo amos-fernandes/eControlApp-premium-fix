@@ -39,6 +39,9 @@ export function ServiceOrderCard({ order, onPress }: ServiceOrderCardProps) {
   const routeName = getRouteName(order);
   const voyageName = getVoyageName(order);
   const orderHasVoyage = hasVoyage(order);
+  
+  // Usa identifier se disponível, senão usa ID formatado
+  const displayId = order.identifier || `#${String(order.id).padStart(4, "0")}`;
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -58,7 +61,7 @@ export function ServiceOrderCard({ order, onPress }: ServiceOrderCardProps) {
           <View style={styles.idContainer}>
             <Text style={[styles.idLabel, { color: theme.textMuted }]}>OS</Text>
             <Text style={[styles.id, { color: theme.text }]}>
-              #{String(order.id).padStart(4, "0")}
+              {displayId}
             </Text>
           </View>
           <StatusBadge status={order.status} small />
