@@ -21,8 +21,8 @@ import {
   getServicesOrders,
   getRouteName,
   getVoyageName,
-  type ServiceOrder,
 } from "@/services/servicesOrders";
+import type { ServiceOrder } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 
 export default function RoutesScreen() {

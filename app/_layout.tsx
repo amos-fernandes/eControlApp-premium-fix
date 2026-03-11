@@ -13,8 +13,12 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { FilterProvider } from "@/context/FilterContext";
 import { queryClient } from "@/lib/query-client";
+import { initDatabase } from "@/databases/database";
 
 SplashScreen.preventAutoHideAsync();
+
+// Inicializa banco de dados imediatamente
+initDatabase();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({

@@ -18,21 +18,80 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 import type { Credentials } from "@/context/AuthContext";
 
-const DEFAULT_BASE_URL = "https://econtrole.com/api";
+// Base64 decode for React Native
+function atobPolyfill(str: string): string {
+  try {
+    // React Native has atob globally
+    if (typeof atob === "function") {
+      return atob(str);
+    }
+    // Fallback using Buffer (Node.js)
+    if (typeof Buffer !== "undefined") {
+      return Buffer.from(str, "base64").toString("utf-8");
+    }
+    // Fallback using built-in React Native global
+    return global.atob(str);
+  } catch (e) {
+    throw new Error("Base64 decode failed");
+  }
+}
+
+const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
 
 // ─── What the QR code can contain ─────────────────────────────────────────────
 type QRResult =
   | { type: "credentials"; email: string; password: string; baseUrl?: string }
   | { type: "token"; creds: Credentials; baseUrl?: string }
+  | { type: "subdomain"; subdomain: string }
   | { type: "unknown" };
 
 // ─── Universal QR parser ───────────────────────────────────────────────────────
 function parseQR(raw: string): QRResult {
   const data = raw.trim();
+  console.log("[QRScanner] Raw data:", data);
+
+  // ── 0. Base64 detection (common in QR codes) ─────────────────────────────────
+  // Try to decode if it looks like Base64
+  if (/^[A-Za-z0-9+/]+=*$/.test(data) && data.length > 4) {
+    try {
+      const decoded = atobPolyfill(data);
+      console.log("[QRScanner] Base64 detected, decoded:", decoded);
+      
+      // Check if decoded contains credentials info
+      if (decoded.includes("@") && (decoded.includes(":") || decoded.includes(";"))) {
+        // Format: email:password or email;password
+        const parts = decoded.split(/[:;]/);
+        if (parts.length >= 2 && parts[0].includes("@")) {
+          console.log("[QRScanner] Base64 credentials detected");
+          return {
+            type: "credentials",
+            email: parts[0].trim(),
+            password: parts.slice(1).join("").trim(),
+          };
+        }
+      }
+      
+      // If decoded is just a subdomain (like "gsambientais")
+      if (decoded.length > 3 && !decoded.includes(" ") && !decoded.includes("@")) {
+        console.log("[QRScanner] Base64 subdomain detected:", decoded);
+        // Return as subdomain that will be used to build URL
+        return {
+          type: "subdomain",
+          subdomain: decoded,
+        };
+      }
+      
+      // Try parsing decoded as JSON
+      return parseQR(decoded);
+    } catch (e) {
+      console.log("[QRScanner] Base64 decode failed:", e);
+    }
+  }
 
   // ── 1. JSON object ──────────────────────────────────────────────────────────
   try {
     const p = JSON.parse(data);
+    console.log("[QRScanner] Parsed JSON:", p);
     if (p && typeof p === "object") {
       // credentials style: {login, senha} / {email, password} / {usuario, senha}
       const email =
@@ -40,6 +99,7 @@ function parseQR(raw: string): QRResult {
       const password =
         p.senha || p.password || p.pass || p.secret || p.pwd || "";
       if (email && password) {
+        console.log("[QRScanner] Detected credentials format");
         return {
           type: "credentials",
           email: String(email).trim(),
@@ -53,6 +113,7 @@ function parseQR(raw: string): QRResult {
       const client = p.client || p.client_id || "";
       const uid = p.uid || p.email || p.login || p.usuario || "";
       if (token) {
+        console.log("[QRScanner] Detected token format");
         return {
           type: "token",
           creds: { accessToken: String(token), client: String(client), uid: String(uid), email: String(uid) },
@@ -60,7 +121,8 @@ function parseQR(raw: string): QRResult {
         };
       }
     }
-  } catch {
+  } catch (e) {
+    console.log("[QRScanner] Not JSON:", e);
     // not JSON
   }
 
@@ -75,6 +137,7 @@ function parseQR(raw: string): QRResult {
     /(?:senha|password|pass|pwd|secret)\s*[:=]\s*([^\n,;]+)/i
   );
   if (emailMatch && passwordMatch) {
+    console.log("[QRScanner] Detected plain text credentials");
     return {
       type: "credentials",
       email: emailMatch[1].trim(),
@@ -89,12 +152,14 @@ function parseQR(raw: string): QRResult {
     const email = p.get("login") || p.get("email") || p.get("usuario") || "";
     const password = p.get("senha") || p.get("password") || p.get("pass") || "";
     if (email && password) {
+      console.log("[QRScanner] Detected URL credentials");
       return { type: "credentials", email, password, baseUrl: url.origin };
     }
     const token = p.get("access_token") || p.get("token") || p.get("auth_token") || "";
     const uid = p.get("uid") || p.get("email") || "";
     const client = p.get("client") || "";
     if (token) {
+      console.log("[QRScanner] Detected URL token");
       return {
         type: "token",
         creds: { accessToken: token, client, uid, email: uid },
@@ -111,6 +176,7 @@ function parseQR(raw: string): QRResult {
     if (data.includes(sep)) {
       const parts = data.split(sep).map((s) => s.trim());
       if (parts.length >= 2 && parts[0].includes("@")) {
+        console.log("[QRScanner] Detected separator format");
         return { type: "credentials", email: parts[0], password: parts[1] };
       }
     }
@@ -118,12 +184,23 @@ function parseQR(raw: string): QRResult {
 
   // ── 5. Raw token (long string, no spaces) ────────────────────────────────────
   if (data.length > 30 && !data.includes(" ") && !data.includes("\n")) {
+    console.log("[QRScanner] Detected raw token");
     return {
       type: "token",
       creds: { accessToken: data, client: "", uid: "", email: "" },
     };
   }
 
+  // ── 6. Subdomain only (short text without special chars) ─────────────────────
+  if (data.length > 3 && data.length < 50 && /^[a-zA-Z0-9_-]+$/.test(data)) {
+    console.log("[QRScanner] Detected subdomain format");
+    return {
+      type: "subdomain",
+      subdomain: data,
+    };
+  }
+
+  console.log("[QRScanner] Unknown format");
   return { type: "unknown" };
 }
 
@@ -173,14 +250,18 @@ export default function QRScannerScreen() {
     setError("");
     setRawData(data);
 
+    console.log("[QRScanner] Scan started, data length:", data.length);
     const result = parseQR(data);
+    console.log("[QRScanner] Parse result:", result);
 
     if (result.type === "credentials") {
       // QR contains email + password → do a real API login
+      console.log("[QRScanner] Authenticating with credentials...");
       setIsLogging(true);
       setStatus(`Autenticando como ${result.email}...`);
       try {
          const serverUrl = result.baseUrl || baseUrl || DEFAULT_BASE_URL;
+        console.log("[QRScanner] Using server URL:", serverUrl);
         if (result.baseUrl) {
           let cleanUrl = result.baseUrl.replace(/\/$/, "");
           if (!cleanUrl.endsWith("/api")) {
@@ -189,9 +270,11 @@ export default function QRScannerScreen() {
           await setBaseUrl(cleanUrl);
         }
         await login(result.email, result.password, serverUrl);
+        console.log("[QRScanner] Login successful!");
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace("/(tabs)");
       } catch (err: unknown) {
+        console.error("[QRScanner] Login error:", err);
         const msg = err instanceof Error ? err.message : "Erro ao autenticar.";
         setError(msg);
         setIsLogging(false);
@@ -204,15 +287,63 @@ export default function QRScannerScreen() {
       }
     } else if (result.type === "token") {
       // QR contains a direct auth token
+      console.log("[QRScanner] Authenticating with token...");
+      console.log("[QRScanner] Token:", result.creds.accessToken.substring(0, 20) + "...");
       setIsLogging(true);
       setStatus("Autenticando com token...");
       try {
-        if (result.baseUrl) await setBaseUrl(result.baseUrl);
+        if (result.baseUrl) {
+          await setBaseUrl(result.baseUrl);
+        }
+        console.log("[QRScanner] Using credentials:", result.creds);
         await loginWithCredentials(result.creds);
+        console.log("[QRScanner] Token auth successful!");
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         router.replace("/(tabs)");
       } catch (err: unknown) {
+        console.error("[QRScanner] Token auth error:", err);
         const msg = err instanceof Error ? err.message : "Erro ao autenticar.";
+        setError(msg);
+        setIsLogging(false);
+        setStatus("");
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setTimeout(() => {
+          cooldown.current = false;
+          setScanned(false);
+        }, 3000);
+      }
+    } else if (result.type === "subdomain") {
+      // QR contains only subdomain - set URL and show login screen
+      console.log("[QRScanner] Subdomain detected:", result.subdomain);
+      setIsLogging(true);
+      setStatus(`Configurando servidor: ${result.subdomain}...`);
+      try {
+        // Build URL from subdomain
+        const subdomain = result.subdomain.toLowerCase().trim();
+        let serverUrl = `https://${subdomain}.econtrole.com`;
+        console.log("[QRScanner] Building URL:", serverUrl);
+        
+        let cleanUrl = serverUrl.replace(/\/$/, "");
+        if (!cleanUrl.endsWith("/api")) {
+          cleanUrl = cleanUrl + "/api";
+        }
+        
+        await setBaseUrl(cleanUrl);
+        console.log("[QRScanner] URL set to:", cleanUrl);
+        
+        // Show success and go to login screen to enter credentials
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setStatus(`Servidor configurado! Faça login.`);
+        
+        setTimeout(() => {
+          setIsLogging(false);
+          setStatus("");
+          // Go to login screen instead of main app
+          router.replace("/(auth)/login");
+        }, 1500);
+      } catch (err: unknown) {
+        console.error("[QRScanner] Subdomain config error:", err);
+        const msg = err instanceof Error ? err.message : "Erro ao configurar servidor.";
         setError(msg);
         setIsLogging(false);
         setStatus("");
@@ -224,6 +355,7 @@ export default function QRScannerScreen() {
       }
     } else {
       // Unknown format — show raw data
+      console.log("[QRScanner] Unknown format");
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError("Formato não reconhecido. Toque para ver os dados brutos.");
       setShowRaw(true);

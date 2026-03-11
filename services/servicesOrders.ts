@@ -125,7 +125,12 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
 
     return orders;
   } catch (error: any) {
-    console.error("getServicesOrders: Error:", error.message);
+    // Não loga como erro se não tiver credenciais ou domain - isso é esperado
+    if (error.message === "NO_CREDENTIALS" || error.message === "NO_DOMAIN") {
+      console.log("getServicesOrders: No credentials or domain - user not authenticated");
+    } else {
+      console.error("getServicesOrders: Error:", error.message);
+    }
 
     // Se falhar a API, tenta retornar do cache
     if (error.message !== "NO_CREDENTIALS" && error.message !== "NO_DOMAIN") {

@@ -62,17 +62,17 @@ export default function UpdateOrderScreen() {
 
   // Busca dados da OS do cache - mesma abordagem da tela de detalhes
   const queryCache = queryClient.getQueryCache();
-  const allQueries = queryCache.findAll(["service_orders"]);
-  
+  const allQueries = queryCache.findAll() as any[];
+
   let cachedOrder: ServiceOrder | undefined;
   for (const query of allQueries) {
     const orders = query.state.data as ServiceOrder[] | undefined;
-    if (orders) {
+    if (orders && Array.isArray(orders)) {
       cachedOrder = orders.find(o => String(o.id) === id);
       if (cachedOrder) break;
     }
   }
-  
+
   const order = cachedOrder;
 
   // Handler para abrir Google Maps
@@ -225,7 +225,7 @@ export default function UpdateOrderScreen() {
             (e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId)
           );
           return {
-            id: exec?.id,
+            id: exec?.id || 0,
             service_id: sw.serviceId,
             amount: parseFloat(sw.weight.replace(",", ".")),
             service_item_weights: exec?.service_item_weights,
@@ -255,6 +255,9 @@ export default function UpdateOrderScreen() {
       console.log("[UpdateOrder] Enviando para conferência:", JSON.stringify(updates, null, 2));
 
       // Envia para conferência
+      if (!credentials) {
+        throw new Error("Credenciais não encontradas. Faça login novamente.");
+      }
       await finishServiceOrder(
         { baseUrl, credentials },
         order.id,

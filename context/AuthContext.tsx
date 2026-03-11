@@ -176,8 +176,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(CREDENTIALS_KEY),
           AsyncStorage.getItem(BASE_URL_KEY),
         ]);
+        console.log("[AuthContext] Loaded storedCreds:", storedCreds ? "EXISTS" : "NULL");
+        console.log("[AuthContext] Loaded storedUrl:", storedUrl);
+        
         if (storedCreds) {
-          setCredentials(JSON.parse(storedCreds));
+          try {
+            const parsed = JSON.parse(storedCreds);
+            // Valida se tem accessToken válido
+            if (parsed.accessToken && parsed.accessToken.length > 10) {
+              console.log("[AuthContext] Valid credentials found");
+              setCredentials(parsed);
+            } else {
+              console.log("[AuthContext] Invalid credentials - clearing");
+              await AsyncStorage.removeItem(CREDENTIALS_KEY);
+            }
+          } catch (e) {
+            console.log("[AuthContext] Corrupted credentials - clearing");
+            await AsyncStorage.removeItem(CREDENTIALS_KEY);
+          }
         }
         if (storedUrl) {
           let cleanUrl = storedUrl.replace(/\/$/, "");

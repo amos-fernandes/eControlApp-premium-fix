@@ -55,6 +55,8 @@ export interface ServiceExecution {
   id: number | string;
   service?: Service;
   service_item_weights?: ServiceItemWeight[];
+  amount?: number;
+  unit?: { name?: string; abbreviation?: string };  // Para compatibilidade com update.tsx
 }
 
 export interface ServiceItemWeight {
