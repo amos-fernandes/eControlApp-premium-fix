@@ -127,7 +127,7 @@ export default function LoginScreen() {
         >
           <View style={styles.logoArea}>
             <View style={styles.logoContainer}>
-              <MaterialCommunityIcons name="recycle" size={40} color="#4CAF50" />
+              <MaterialCommunityIcons name="recycle" size={40} color="#73b275" />
             </View>
             <Text style={styles.appName}>eControle</Text>
             <Text style={styles.appSubtitle}>Gestão de Ordens de Serviço</Text>

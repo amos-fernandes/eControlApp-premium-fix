@@ -1,5 +1,5 @@
 // Verde bem clarinho (como no outro app)
-const primary = "#66BB6A";
+const primary = "#96cb99";
 const primaryLight = "#81C784";
 const primaryDark = "#388E3C";
 const accent = "#81C784";
