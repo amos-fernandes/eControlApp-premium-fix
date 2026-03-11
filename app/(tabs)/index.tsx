@@ -21,7 +21,7 @@ import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useFilters } from "@/context/FilterContext";
-import { getServicesOrders, getClientName } from "@/services/servicesOrders";
+import { getServicesOrders, getClientName, clearServiceOrdersCache } from "@/services/servicesOrders";
 import type { ServiceOrder } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 
@@ -108,12 +108,25 @@ export default function OrdersScreen() {
       <View style={[styles.header, { paddingTop: topPadding + 12, backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Ordens de Servico</Text>
-          <Pressable
-            style={[styles.filterBtn, hasActiveFilters && { backgroundColor: Colors.primary }]}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowFilters(true); }}
-          >
-            <Feather name="sliders" size={16} color={hasActiveFilters ? "#fff" : theme.textSecondary} />
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                clearServiceOrdersCache();
+                refetch();
+              }}
+              style={[styles.filterBtn, { marginRight: 0 }]}
+              title="Atualizar"
+            >
+              <Feather name="refresh-cw" size={16} color={theme.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={[styles.filterBtn, hasActiveFilters && { backgroundColor: Colors.primary }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowFilters(true); }}
+            >
+              <Feather name="sliders" size={16} color={hasActiveFilters ? "#fff" : theme.textSecondary} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={[styles.searchBar, { backgroundColor: isDark ? theme.surfaceSecondary : "#F8FAF9", borderColor: theme.border }]}>
