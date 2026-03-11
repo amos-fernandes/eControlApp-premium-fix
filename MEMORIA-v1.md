@@ -5,7 +5,7 @@
 
 **Data**: 2026-03-11 (Última atualização)
 **Versão Atual**: 1.6.2-pre
-**Status**: ✅ Funcional + Cache SQLite + Refresh Token
+**Status**: ✅ Funcional + Cache SQLite + Refresh Token + Status Corretos
 **Branch**: `developer`
 
 ---
@@ -31,12 +31,13 @@
 - **Arquivos**: `app/order/update.tsx`
 
 ### **Status nos Cards** ✅
-- **Problema**: Status fixo em "Pendente"
+- **Problema**: Status fixo em "Pendente" (API retorna em inglês)
 - **Solução**: 
+  - StatusBadge mapeia: running → Em conferência, scheduled → Pendente
   - SESSION_EXPIRED não faz fallback para cache
   - Força recarregamento com status atualizados
   - Botão "Atualizar" limpa cache
-- **Arquivos**: `services/servicesOrders.ts`
+- **Arquivos**: `components/StatusBadge.tsx`, `services/servicesOrders.ts`
 
 ### **Nome da Viagem no Card** ✅
 - **Mudança**: Card mostra nome da viagem ao invés de "OS #33917"
@@ -47,6 +48,25 @@
 - 🔄 **Atualizar** - Limpa cache e recarrega OS
 - 🚪 **Logout** - Logout manual
 - ⚙️ **Filtros** - Status, tipo, viagem, rota, datas
+
+### **Cores Atualizadas** ✅
+- **Mudança**: Verde escuro → Verde bem clarinho
+- **Cores**:
+  - primary: `#1B5E35` → `#66BB6A`
+  - primaryLight: `#2E7D52` → `#81C784`
+  - primaryDark: `#0D2E1C` → `#388E3C`
+- **Visual**: Mais suave e moderno, similar ao outro app eControle
+
+### **Mapeamento de Status** ✅
+```
+API (inglês)      →  Exibido (português)
+─────────────────────────────────────────
+running           →  Em conferência (amarelo)
+scheduled         →  Pendente (cinza)
+canceled          →  Cancelada (vermelho)
+finished          →  Concluída (verde)
+started           →  Iniciada (azul)
+```
 
 ---
 
