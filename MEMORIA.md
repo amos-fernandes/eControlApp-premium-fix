@@ -7,7 +7,7 @@ Este arquivo documenta todas as interações e correções realizadas para resol
 2024-06-08
 
 ## Perfil do Assistente
-- **Identidade**: Giga Potato
+- **Identidade**: Ed
 - **Especialidades**: React Native, TypeScript, Node.js, Expo CLI, Java
 - **Experiência**: Ph.D. em React Native
 - **Missão**: Corrigir bugs e implementar funcionalidades no eControlApp

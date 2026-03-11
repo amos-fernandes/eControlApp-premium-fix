@@ -301,7 +301,7 @@ export default function LoginScreen() {
                 <View style={styles.urlHints}>
                   <Text style={styles.urlHintTitle}>URLs comuns:</Text>
                   {[
-                    "https://econtrole.com",
+                    "https://testeaplicativo.econtrole.com/login",
                     "https://app.econtrole.com",
                     "https://api.econtrole.com",
                     "https://econtrole.com.br",
