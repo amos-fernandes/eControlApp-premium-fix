@@ -58,7 +58,7 @@ export function ServiceOrderCard({ order, onPress }: ServiceOrderCardProps) {
           <View style={styles.idContainer}>
             <Text style={[styles.idLabel, { color: theme.textMuted }]}>OS</Text>
             <Text style={[styles.id, { color: theme.text }]}>
-              #{String(order.id).padStart(4, "0")}
+              {voyageName || `#${String(order.id).padStart(4, "0")}`}
             </Text>
           </View>
           <StatusBadge status={order.status} small />

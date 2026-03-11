@@ -73,9 +73,12 @@ export default function OrdersScreen() {
 
   const handleError = useCallback(async () => {
     if (error instanceof Error && error.message === "SESSION_EXPIRED") {
-      console.log("[IndexScreen] SESSION_EXPIRED - Logging out...");
+      console.log("[IndexScreen] SESSION_EXPIRED - Logging out and redirecting to login...");
       await logout();
-      router.replace("/(auth)/login");
+      // Pequeno delay para garantir que logout completou
+      setTimeout(() => {
+        router.replace("/(auth)/login");
+      }, 100);
     }
   }, [error, logout, router]);
 
@@ -119,6 +122,17 @@ export default function OrdersScreen() {
               title="Atualizar"
             >
               <Feather name="refresh-cw" size={16} color={theme.textSecondary} />
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                logout();
+                router.replace("/(auth)/login");
+              }}
+              style={[styles.filterBtn, { marginRight: 0 }]}
+              title="Logout"
+            >
+              <Feather name="log-out" size={16} color="#EF4444" />
             </Pressable>
             <Pressable
               style={[styles.filterBtn, hasActiveFilters && { backgroundColor: Colors.primary }]}
