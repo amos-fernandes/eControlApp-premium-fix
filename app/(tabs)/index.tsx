@@ -28,7 +28,7 @@ import { useQuery } from "@tanstack/react-query";
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const { credentials, baseUrl, logout } = useAuth();
+  const { credentials, baseUrl, logout, refreshCredentials } = useAuth();
   const { filters, setFilter, resetFilters, hasActiveFilters } = useFilters();
   const [showFilters, setShowFilters] = useState(false);
   const [localSearch, setLocalSearch] = useState("");
@@ -73,14 +73,25 @@ export default function OrdersScreen() {
 
   const handleError = useCallback(async () => {
     if (error instanceof Error && error.message === "SESSION_EXPIRED") {
-      console.log("[IndexScreen] SESSION_EXPIRED - Logging out and redirecting to login...");
-      await logout();
-      // Pequeno delay para garantir que logout completou
-      setTimeout(() => {
-        router.replace("/(auth)/login");
-      }, 100);
+      console.log("[IndexScreen] SESSION_EXPIRED - Attempting refresh...");
+      
+      // Tenta refresh automático
+      const refreshed = await refreshCredentials();
+      
+      if (refreshed) {
+        console.log("[IndexScreen] Refresh successful - retrying request");
+        // Refresh bem-sucedido - tenta recarregar os dados
+        refetch();
+      } else {
+        console.log("[IndexScreen] Refresh failed - logging out");
+        // Refresh falhou - faz logout
+        await logout();
+        setTimeout(() => {
+          router.replace("/(auth)/login");
+        }, 100);
+      }
     }
-  }, [error, logout, router]);
+  }, [error, logout, router, refreshCredentials, refetch]);
 
   // Usar useEffect para chamar handleError depois do render
   useEffect(() => {

@@ -25,6 +25,7 @@ interface AuthContextValue {
   login: (email: string, password: string, baseUrl: string) => Promise<void>;
   loginWithCredentials: (creds: Credentials) => Promise<void>;
   logout: () => Promise<void>;
+  refreshCredentials: () => Promise<boolean>;
   baseUrl: string;
   setBaseUrl: (url: string) => Promise<void>;
   testConnection: (baseUrl: string) => Promise<{ ok: boolean; message: string }>;
@@ -332,6 +333,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Keep baseUrl so user doesn't have to re-enter server URL
   }, []);
 
+  const refreshCredentials = useCallback(async (): Promise<boolean> => {
+    if (!credentials || !baseUrl) {
+      console.log("[AuthContext] Cannot refresh - no credentials or baseUrl");
+      return false;
+    }
+
+    try {
+      console.log("[AuthContext] Refreshing credentials...");
+      
+      // Devise Token Auth: GET /auth/validate_token renova os headers
+      const url = `${baseUrl}/auth/validate_token`;
+      const headers = {
+        "Content-Type": "application/json",
+        "access-token": credentials.accessToken,
+        client: credentials.client,
+        uid: credentials.uid,
+      };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (response.status === 401) {
+        console.log("[AuthContext] Refresh failed - token expired");
+        return false;
+      }
+
+      if (!response.ok) {
+        console.log("[AuthContext] Refresh failed - status", response.status);
+        return false;
+      }
+
+      // Pega novos headers da resposta
+      const newAccessToken = response.headers.get("access-token") || credentials.accessToken;
+      const newClient = response.headers.get("client") || credentials.client;
+      const newUid = response.headers.get("uid") || credentials.uid;
+
+      // Atualiza credenciais se vieram novos headers
+      const updatedCreds: Credentials = {
+        accessToken: newAccessToken,
+        client: newClient,
+        uid: newUid,
+        email: credentials.email,
+      };
+
+      setCredentials(updatedCreds);
+      await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+      
+      // Atualiza no SQLite
+      insertCredentials({
+        _id: 'main',
+        accessToken: newAccessToken,
+        uid: newUid,
+        client: newClient,
+      });
+
+      console.log("[AuthContext] Credentials refreshed successfully");
+      return true;
+    } catch (error) {
+      console.error("[AuthContext] Refresh error:", error);
+      return false;
+    }
+  }, [credentials, baseUrl]);
+
   const testConnection = useCallback(
     async (testUrl: string): Promise<{ ok: boolean; message: string }> => {
       const cleanBase = testUrl.replace(/\/$/, "");
@@ -368,6 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       loginWithCredentials,
       logout,
+      refreshCredentials,
       baseUrl,
       setBaseUrl,
       testConnection,
@@ -378,6 +451,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       loginWithCredentials,
       logout,
+      refreshCredentials,
       baseUrl,
       setBaseUrl,
       testConnection,
