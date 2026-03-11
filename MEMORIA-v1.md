@@ -3,10 +3,50 @@
 ## 📋 Visão Geral
 **eControlApp** - Aplicativo React Native para gestão de ordens de serviço da eControle Pro.
 
-**Data**: 2026-03-10 (Última atualização)  
-**Versão Atual**: 1.6.0  
-**Status**: ✅ Funcional + Cache SQLite  
+**Data**: 2026-03-11 (Última atualização)
+**Versão Atual**: 1.6.2-pre
+**Status**: ✅ Funcional + Cache SQLite + Refresh Token
 **Branch**: `developer`
+
+---
+
+## 🎯 NOVIDADES v1.6.2-pre (2026-03-11)
+
+### **Refresh Automático de Token** ✅
+- **Problema**: Token expirava rapidamente, forçando logout constante
+- **Solução**: `refreshCredentials()` usa `GET /auth/validate_token`
+- **Arquivos**: `context/AuthContext.tsx`, `app/(tabs)/index.tsx`
+- **Fluxo**:
+  1. Token expira (401)
+  2. Refresh automático tenta renovar
+  3. Se funcionar: continua usando app
+  4. Se falhar: logout e login
+
+### **Correção da Coleta** ✅
+- **Problema**: Coleta ficava "carregando" infinito
+- **Solução**: 
+  - Busca OS por `id` OU `identifier`
+  - Invalida cache se OS não encontrada
+  - Refresh automático na coleta
+- **Arquivos**: `app/order/update.tsx`
+
+### **Status nos Cards** ✅
+- **Problema**: Status fixo em "Pendente"
+- **Solução**: 
+  - SESSION_EXPIRED não faz fallback para cache
+  - Força recarregamento com status atualizados
+  - Botão "Atualizar" limpa cache
+- **Arquivos**: `services/servicesOrders.ts`
+
+### **Nome da Viagem no Card** ✅
+- **Mudança**: Card mostra nome da viagem ao invés de "OS #33917"
+- **Exemplo**: "11/03 ROTA S1" ou "#0001" se não tiver viagem
+- **Arquivos**: `components/ServiceOrderCard.tsx`
+
+### **Botões na Tela Principal** ✅
+- 🔄 **Atualizar** - Limpa cache e recarrega OS
+- 🚪 **Logout** - Logout manual
+- ⚙️ **Filtros** - Status, tipo, viagem, rota, datas
 
 ---
 

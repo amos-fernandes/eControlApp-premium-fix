@@ -24,11 +24,11 @@ interface FilterModalProps {
 
 const STATUS_OPTIONS = [
   { label: "Todos", value: "" },
-  { label: "Pendente", value: "Pendente" },
-  { label: "Em Conferência", value: "Em conferência" },
-  { label: "Iniciada", value: "Iniciada" },
-  { label: "Concluída", value: "Concluída" },
-  { label: "Cancelada", value: "Cancelada" },
+  { label: "Pendente", value: "scheduled" },
+  { label: "Em Conferência", value: "running" },
+  { label: "Iniciada", value: "started" },
+  { label: "Concluída", value: "finished" },
+  { label: "Cancelada", value: "canceled" },
 ];
 
 const TYPE_OPTIONS = [

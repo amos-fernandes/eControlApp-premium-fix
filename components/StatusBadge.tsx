@@ -7,6 +7,21 @@ interface StatusBadgeProps {
   small?: boolean;
 }
 
+// Status da API (inglês) → Status exibido (português)
+const STATUS_MAP: Record<string, string> = {
+  "running": "Em conferência",
+  "scheduled": "Pendente",
+  "canceled": "Cancelada",
+  "finished": "Concluída",
+  "started": "Iniciada",
+  // Já em português (fallback)
+  "Em conferência": "Em conferência",
+  "Pendente": "Pendente",
+  "Cancelada": "Cancelada",
+  "Concluída": "Concluída",
+  "Iniciada": "Iniciada",
+};
+
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   "Em conferência": { bg: "#FEF3C7", text: "#92400E", label: "Em Conferência" },
   "Iniciada": { bg: "#DBEAFE", text: "#1E40AF", label: "Iniciada" },
@@ -26,8 +41,11 @@ const STATUS_CONFIG_DARK: Record<string, { bg: string; text: string }> = {
 export function StatusBadge({ status, small = false }: StatusBadgeProps) {
   const { isDark } = useTheme();
 
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG["Pendente"];
-  const darkConfig = STATUS_CONFIG_DARK[status] || STATUS_CONFIG_DARK["Pendente"];
+  // Mapeia status da API para português
+  const mappedStatus = STATUS_MAP[status] || status;
+  
+  const config = STATUS_CONFIG[mappedStatus] || STATUS_CONFIG["Pendente"];
+  const darkConfig = STATUS_CONFIG_DARK[mappedStatus] || STATUS_CONFIG_DARK["Pendente"];
 
   const bg = isDark ? darkConfig.bg : config.bg;
   const textColor = isDark ? darkConfig.text : config.text;
