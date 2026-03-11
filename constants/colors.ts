@@ -1,8 +1,9 @@
-const primary = "#1B5E35";
-const primaryLight = "#2E7D52";
-const primaryDark = "#0D2E1C";
-const accent = "#4CAF50";
-const accentLight = "#81C784";
+// Verde bem clarinho (como no outro app)
+const primary = "#66BB6A";
+const primaryLight = "#81C784";
+const primaryDark = "#388E3C";
+const accent = "#81C784";
+const accentLight = "#A5D6A7";
 
 export const Colors = {
   primary,
