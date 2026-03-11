@@ -138,12 +138,16 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     // Não loga como erro se não tiver credenciais ou domain - isso é esperado
     if (error.message === "NO_CREDENTIALS" || error.message === "NO_DOMAIN") {
       console.log("getServicesOrders: No credentials or domain - user not authenticated");
+    } else if (error.message === "SESSION_EXPIRED") {
+      console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
+      // Não faz fallback para cache quando SESSION_EXPIRED
+      // Isso força o componente a detectar o erro e tentar refresh
     } else {
       console.error("getServicesOrders: Error:", error.message);
     }
 
-    // Se falhar a API, tenta retornar do cache
-    if (error.message !== "NO_CREDENTIALS" && error.message !== "NO_DOMAIN") {
+    // Se falhar a API, tenta retornar do cache (exceto SESSION_EXPIRED)
+    if (error.message !== "NO_CREDENTIALS" && error.message !== "NO_DOMAIN" && error.message !== "SESSION_EXPIRED") {
       console.log("getServicesOrders: Falling back to SQLite cache...");
       try {
         const cachedOrders = getServiceOrdersFromCache();

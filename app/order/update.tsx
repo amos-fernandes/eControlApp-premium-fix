@@ -40,7 +40,7 @@ export default function UpdateOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { credentials, baseUrl } = useAuth();
+  const { credentials, baseUrl, logout, refreshCredentials } = useAuth();
   const queryClient = useQueryClient();
 
   // Estados de coleta
@@ -68,12 +68,20 @@ export default function UpdateOrderScreen() {
   for (const query of allQueries) {
     const orders = query.state.data as ServiceOrder[] | undefined;
     if (orders && Array.isArray(orders)) {
-      cachedOrder = orders.find(o => String(o.id) === id);
+      cachedOrder = orders.find(o => String(o.id) === id || String(o.identifier) === id);
       if (cachedOrder) break;
     }
   }
 
   const order = cachedOrder;
+  
+  // Se não encontrou OS no cache, tenta recarregar
+  React.useEffect(() => {
+    if (!order && credentials) {
+      console.log("[UpdateOrder] Order not found in cache, invalidating queries...");
+      queryClient.invalidateQueries({ queryKey: ["service_orders"] });
+    }
+  }, [order, credentials, queryClient]);
 
   // Handler para abrir Google Maps
   const handleOpenMap = () => {
@@ -283,22 +291,34 @@ export default function UpdateOrderScreen() {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Erro ao enviar para conferência";
-      
+
       // Verifica se é sessão expirada
       if (msg === "SESSION_EXPIRED") {
-        Alert.alert(
-          "Sessão Expirada",
-          "Sua sessão expirou. Faça login novamente.",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                logout();
-                router.replace("/(auth)/login");
-              }
-            }
-          ]
-        );
+        // Tenta refresh primeiro
+        (async () => {
+          const refreshed = await refreshCredentials();
+          if (refreshed) {
+            Alert.alert(
+              "Sessão Renovada",
+              "Sua sessão foi renovada. Tente novamente.",
+              [{ text: "OK" }]
+            );
+          } else {
+            Alert.alert(
+              "Sessão Expirada",
+              "Sua sessão expirou. Faça login novamente.",
+              [
+                {
+                  text: "OK",
+                  onPress: () => {
+                    logout();
+                    router.replace("/(auth)/login");
+                  }
+                }
+              ]
+            );
+          }
+        })();
       } else {
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert("Erro", msg);
