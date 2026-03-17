@@ -32,7 +32,7 @@ const defaultFilters: ServiceOrderFilters = {
   status: "",
   type: "",
   hasVoyage: "",
-  startDate: getDateDaysAgo(20), // Últimos 20 dias
+  startDate: (getTodayDate())+(getTodayDate()+7), // Últimos 20 dias
   endDate: getTodayDate(),
   routeName: "",
   search: "",
@@ -62,8 +62,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysAgo(20),
-      endDate: getTodayDate(),
+      startDate: getDateDaysAgo(7),
+      endDate: (getTodayDate())+(getTodayDate()+7),
       routeName: "",
       search: "",
     });

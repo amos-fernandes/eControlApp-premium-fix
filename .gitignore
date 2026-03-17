@@ -11,3 +11,12 @@ temp*
 CON*.md
 FI*.md
 MEM*.md
+.ios
+ios
+/ios
+./ios
+./android
+android
+/android
+.android
+.expo

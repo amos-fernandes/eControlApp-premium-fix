@@ -139,8 +139,8 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysAgo(20), // Últimos 20 dias
-      endDate: getTodayDate(),
+      startDate: getDateDaysAgo(7), // Últimos 20 dias
+      endDate: (getTodayDate())+(getTodayDate()+7),
       routeName: "",
       search: "",
     };
