@@ -76,7 +76,7 @@ Este arquivo documenta todas as interações e correções realizadas para resol
 - Verificação da resposta da API: Retorna 20 ordens de serviço no formato esperado
 
 ## Credenciais de Teste
-- **Email**: motoristaapp@econtrole.com
+- **Email**: suporte@econtrole.com
 - **Senha**: ecomotoapp
 - **URL Base**: https://gsambientais.econtrole.com/api
 
@@ -163,7 +163,7 @@ A API retorna a estrutura de dados em formatos diferentes do esperado:
 - ✅ Navegação para detalhes da OS: Funcionando
 
 ### Credenciais de Teste
-- **Email**: motoristaapp@econtrole.com
+- **Email**: suporte@econtrole.com
 - **Senha**: ecomotoapp
 - **URL Base**: https://gsambientais.econtrole.com/api
 
@@ -307,6 +307,6 @@ Tela completa de coleta com:
 5. Clica em **"Enviar para Conferência"** → Dados enviados
 
 ### Credenciais de Teste
-- **Email**: motoristaapp@econtrole.com
+- **Email**: suporte@econtrole.com
 - **Senha**: ecomotoapp
 - **URL Base**: https://gsambientais.econtrole.com/api

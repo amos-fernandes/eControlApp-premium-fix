@@ -115,7 +115,7 @@ started           →  Iniciada (azul)
 ## 🔐 Autenticação
 
 ### Credenciais de Teste
-- **Email**: `motoristaapp@econtrole.com`
+- **Email**: `suporte@econtrole.com`
 - **Senha**: `ecomotoapp`
 - **URL Base**: `https://gsambientais.econtrole.com/api`
 
@@ -1087,3 +1087,39 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 **Última Atualização**: 2026-03-10  
 **Versão**: 1.6.0  
 **Status**: ✅ Desenvolvimento (branch `developer`)
+
+---
+
+## 🎯 NOVIDADES v1.7.0 (2026-03-18) - PhD Refactor & Persistence
+
+### **Carga de Dados e Range de Datas** ✅
+- **Regra**: O app agora carrega Ordens de Serviço em um range de **40 dias** (20 dias antes e 20 dias depois do dia atual).
+- **Implementação**: Ajuste no FilterContext.tsx e na lógica de reset do FilterModal.tsx.
+- **Benefício**: Maior visibilidade para planejamentos futuros e histórico imediato.
+
+### **Filtragem de Status Acting (Atuando)** ✅
+- **Regra**: O filtro Todos (padrão) agora oculta automaticamente OS com status finished (Concluída) ou canceled (Cancelada).
+- **Lógica**: Implementada filtragem local no services/servicesOrders.ts para garantir que apenas OS em atuação (running, started, scheduled) sejam exibidas na carga inicial.
+- **Status Acting**: Equivale à soma de Iniciada + Em Conferência.
+
+### **Persistência de Rascunho Offline (SQLite)** ✅
+- **Problema**: Perda de dados se o app fechasse durante a coleta.
+- **Solução**: Nova tabela service_order_drafts no SQLite.
+- **Recursos**:
+  - saveDraft: Salva automaticamente cada alteração nos campos de coleta.
+  - getDraft: Recupera dados salvos ao reabrir uma OS.
+  - clearDraft: Limpa o rascunho apenas após o envio bem-sucedido.
+- **Arquivos**: databases/database.ts, app/order/update.tsx.
+
+### **Novo Serviço de Coleta (CollectionService)** ✅
+- **MTR Webhook**: Integração com o webhook eControle (http://159.89.191.25:8000) para emissão pós-conferência.
+- **AWS S3**: Lógica de upload binário preparada e validada via script de teste.
+- **Finalização Robusta**: Função finishOrder que gerencia o ciclo de vida do envio e limpeza de cache.
+
+### **Validação Técnica (Impecável)** ✅
+- **Teste de Integração**: Criado script scripts/comprehensive_integration_test.js.
+- **AWS S3**: Validado upload com **Status 200 OK** no bucket bkt-econtrole.
+- **MTR**: Lógica de token CETESB e Webhook validada com **10/11 testes aprovados**.
+- **Navegabilidade**: Validada carga de **1186 OS** com filtragem de **542 ativas** no ambiente testeaplicativo.
+
+---

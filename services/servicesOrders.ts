@@ -107,7 +107,25 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       orders = data.service_orders.filter((item: any) => item && typeof item === "object");
     }
 
-    console.log(`getServicesOrders: Received ${orders.length} orders from API`);
+    // --- FILTRAGEM CUSTOMIZADA ---
+    // Se o filtro de status estiver vazio (Todos), filtramos para mostrar apenas 'atuando'
+    // e excluímos explicitamente canceladas e finalizadas.
+    if (!filters.status) {
+      console.log("getServicesOrders: Filtering for 'acting' orders (excluding finished/canceled)");
+      orders = orders.filter((o) => {
+        const status = (o.status || "").toLowerCase();
+        // Não mostramos finalizadas ou canceladas no modo 'Todos'
+        if (status === "finished" || status === "concluída" || status === "concluida" || 
+            status === "canceled" || status === "cancelada") {
+          return false;
+        }
+        // Mostramos apenas as que estão atuando ou pendentes
+        return true; 
+      });
+    }
+    // ----------------------------
+
+    console.log(`getServicesOrders: Received ${orders.length} orders after filtering`);
     
     // Log dos status recebidos para debug
     const statusCount: Record<string, number> = {};

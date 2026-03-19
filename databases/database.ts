@@ -76,7 +76,41 @@ export const initDatabase = () => {
       created_at TEXT,
       FOREIGN KEY(service_order_id) REFERENCES service_orders(id)
     );
+
+    CREATE TABLE IF NOT EXISTS service_order_drafts (
+      id INTEGER PRIMARY KEY NOT NULL,
+      draft_data TEXT,
+      updated_at TEXT
+    );
   `)
+}
+
+/**
+ * Salva um rascunho de coleta para uma ordem de serviço.
+ */
+export const saveServiceOrderDraft = (id: number | string, data: any) => {
+    const db = getDB()
+    db.runSync(
+        'INSERT OR REPLACE INTO service_order_drafts (id, draft_data, updated_at) VALUES (?, ?, ?)',
+        [id, JSON.stringify(data), new Date().toISOString()],
+    )
+}
+
+/**
+ * Obtém o rascunho de coleta de uma ordem de serviço.
+ */
+export const getServiceOrderDraft = (id: number | string) => {
+    const db = getDB()
+    const row: any = db.getFirstSync('SELECT * FROM service_order_drafts WHERE id = ?', [id])
+    return row ? JSON.parse(row.draft_data) : null
+}
+
+/**
+ * Remove o rascunho de coleta de uma ordem de serviço.
+ */
+export const deleteServiceOrderDraft = (id: number | string) => {
+    const db = getDB()
+    db.runSync('DELETE FROM service_order_drafts WHERE id = ?', [id])
 }
 
 /**

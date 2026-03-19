@@ -10,7 +10,7 @@ temp*
 /temp*
 CON*.md
 FI*.md
-MEM*.md
+./MEM*.md
 .ios
 ios
 /ios
@@ -20,3 +20,13 @@ android
 /android
 .android
 .expo
+./MEMORIA.md
+./CONTEXTO.md
+./MEMORIA.md
+/home/amos/dev/eControlApp-premium-fix/CONTEXTO.md
+*.md
+MEMORIA.md
+.MEMORIA.md
+
+
+

@@ -50,7 +50,7 @@ app/
 
 ## 🔐 Credenciais de Produção
 - **URL**: `https://gsambientais.econtrole.com/api`
-- **Email**: `motoristaapp@econtrole.com`
+- **Email**: `suporte@econtrole.com`
 - **Senha**: `ecomotoapp`
 
 ## 🏆 Funcionalidades Implementadas

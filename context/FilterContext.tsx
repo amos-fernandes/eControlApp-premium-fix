@@ -18,9 +18,9 @@ export interface ServiceOrderFilters {
 }
 
 // Helper para calcular datas
-function getDateDaysAgo(days: number): string {
+function getDateDaysFromNow(days: number): string {
   const date = new Date();
-  date.setDate(date.getDate() - days);
+  date.setDate(date.getDate() + days);
   return date.toISOString().split("T")[0]; // YYYY-MM-DD
 }
 
@@ -28,12 +28,13 @@ function getTodayDate(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// Configuração solicitada: 20 dias antes e 7 dias depois
 const defaultFilters: ServiceOrderFilters = {
-  status: "",
+  status: "", // Vazio significa "Todos" (que será tratado como "acting": running + started)
   type: "",
   hasVoyage: "",
-  startDate: (getTodayDate())+(getTodayDate()+7), // Últimos 20 dias
-  endDate: getTodayDate(),
+  startDate: getDateDaysFromNow(-20),
+  endDate: getDateDaysFromNow(7),
   routeName: "",
   search: "",
 };
@@ -58,19 +59,14 @@ export function FilterProvider({ children }: { children: ReactNode }) {
   );
 
   const resetFilters = useCallback(() => {
-    setFilters({
-      status: "",
-      type: "",
-      hasVoyage: "",
-      startDate: getDateDaysAgo(7),
-      endDate: (getTodayDate())+(getTodayDate()+7),
-      routeName: "",
-      search: "",
-    });
+    setFilters(defaultFilters);
   }, []);
 
   const hasActiveFilters = useMemo(
-    () => Object.values(filters).some((v) => v !== ""),
+    () => {
+      // Consideramos filtros ativos se forem diferentes do default
+      return JSON.stringify(filters) !== JSON.stringify(defaultFilters);
+    },
     [filters]
   );
 
