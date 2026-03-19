@@ -15,7 +15,7 @@ const AWS_CONFIG = {
 // Configurações MTR
 const MTR_CONFIG = {
   ECONTROL_BASE_URL: "http://159.89.191.25:8000",
-  EMIT_PATH: "/mtr/webhook/econtrol/emit",
+  EMIT_PATH: "/mtr/emit",
 };
 
 export interface CollectionData {

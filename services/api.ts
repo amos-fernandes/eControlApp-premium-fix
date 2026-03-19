@@ -370,7 +370,7 @@ export async function emitMTR(
 
   try {
     const response = await fetch(
-      `${WEBHOOK_BASE}/mtr/webhook/econtrol/emit/${token}`,
+      `${WEBHOOK_BASE}/mtr/emit/${token}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
