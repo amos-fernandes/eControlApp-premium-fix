@@ -3,20 +3,8 @@ import * as FileSystem from "expo-file-system";
 import { getCredentials, saveServiceOrderDraft, getServiceOrderDraft, deleteServiceOrderDraft } from "@/databases/database";
 import { retrieveDomain } from "./retrieveUserSession";
 
-// Configurações AWS S3 (validadas nos testes)
-const AWS_CONFIG = {
-  accessKeyId: 'AKIA6AYP5D5ZAQ7K5NGO', 
-  secretAccessKey: '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', 
-  region: 'us-east-2',
-  bucketName: 'bkt-econtrole', 
-  folderName: 'imagens-econtole',
-};
-
-// Configurações MTR
-const MTR_CONFIG = {
-  ECONTROL_BASE_URL: "http://159.89.191.25:8000",
-  EMIT_PATH: "/mtr/emit",
-};
+// Caso o documentDirectory não esteja acessível diretamente no objeto FileSystem em tempo de compilação
+const documentDirectory = FileSystem.documentDirectory as string;
 
 export interface CollectionData {
   arrival_date?: string;
@@ -31,8 +19,22 @@ export interface CollectionData {
   photos?: string[];
 }
 
+/**
+ * Garante que a URL base termine corretamente para a API.
+ */
+async function getCleanBaseUrl() {
+  const domainResult = await retrieveDomain();
+  if (!domainResult.data) throw new Error("Domínio não configurado.");
+  
+  let baseUrl = domainResult.data.replace(/\/$/, "");
+  if (!baseUrl.endsWith("/api")) {
+    baseUrl += "/api";
+  }
+  return baseUrl;
+}
+
 export const saveDraft = async (orderId: string | number, data: CollectionData) => {
-  saveServiceOrderDraft(orderId, data);
+  return saveServiceOrderDraft(orderId, data);
 };
 
 export const getDraft = async (orderId: string | number): Promise<CollectionData | null> => {
@@ -40,19 +42,23 @@ export const getDraft = async (orderId: string | number): Promise<CollectionData
 };
 
 export const clearDraft = async (orderId: string | number) => {
-  deleteServiceOrderDraft(orderId);
+  return deleteServiceOrderDraft(orderId);
 };
 
+/**
+ * Envia os dados de coleta para conferência.
+ * O status "running" na OS e "checking" nos itens garante que ela apareça em "Em Conferência" no painel.
+ */
 export const finishOrder = async (orderId: string | number, data: CollectionData) => {
-  const domainResult = await retrieveDomain();
+  const baseUrl = await getCleanBaseUrl();
   const credentials: any = await getCredentials();
 
-  if (!domainResult.data || !credentials) {
-    throw new Error("Sessão expirada ou domínio não configurado.");
+  if (!credentials) {
+    throw new Error("SESSION_EXPIRED");
   }
 
-  const baseUrl = domainResult.data.replace(/\/$/, "");
-  const url = `${baseUrl}/service_orders/${orderId}/finish`;
+  // Mudamos para o endpoint PUT da OS, não o /finish
+  const url = `${baseUrl}/service_orders/${orderId}`;
 
   const headers = {
     "Content-Type": "application/json",
@@ -61,18 +67,29 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     uid: credentials.uid,
   };
 
+  // Envelopamos os dados em 'service_order' e injetamos o status 'running' (Em Conferência)
+  const payload = {
+    service_order: {
+      ...data,
+      status: "running", // Status global: Em Conferência
+    }
+  };
+
   try {
-    const response = await axios.post(url, data, { headers, timeout: 20000 });
+    console.log(`[CollectionService] Enviando OS ${orderId} para Conferência em: ${url}`);
+    const response = await axios.put(url, payload, { headers, timeout: 25000 });
     await clearDraft(orderId);
     return response.data;
   } catch (error: any) {
-    console.error("finishOrder error:", error.response?.data || error.message);
-    throw error;
+    console.error("[CollectionService] finishOrder error:", error.response?.data || error.message);
+    if (error.response?.status === 401) throw new Error("SESSION_EXPIRED");
+    throw new Error(error.response?.data?.message || "Erro ao enviar para conferência.");
   }
 };
 
 export const emitMTR = async (orderId: string | number, trackingCode: string) => {
-  const url = `${MTR_CONFIG.ECONTROL_BASE_URL}${MTR_CONFIG.EMIT_PATH}`;
+  // Webhook eControle para emissão de MTR
+  const url = "http://159.89.191.25:8000/mtr/emit/econtrol";
   try {
     const response = await axios.post(url, {
       service_order_id: orderId,
@@ -80,51 +97,66 @@ export const emitMTR = async (orderId: string | number, trackingCode: string) =>
     }, { timeout: 30000 });
     return response.data;
   } catch (error: any) {
-    console.error("emitMTR error:", error.response?.data || error.message);
+    console.error("[CollectionService] emitMTR error:", error.response?.data || error.message);
+    throw new Error(error.response?.data?.message || "Erro ao emitir MTR.");
+  }
+};
+
+/**
+ * Download de MTR em PDF.
+ */
+export const downloadMTR = async (mtrId: string | number, pdfUrl: string) => {
+  try {
+    const filename = `MTR_${mtrId}.pdf`;
+    // Usamos a constante desestruturada
+    const fileUri = `${documentDirectory}${filename}`;
+    const downloadRes = await FileSystem.downloadAsync(pdfUrl, fileUri);
+    
+    if (downloadRes.status !== 200) {
+      throw new Error(`Erro no download: Status ${downloadRes.status}`);
+    }
+    return downloadRes.uri;
+  } catch (error) {
+    console.error("[CollectionService] downloadMTR error:", error);
     throw error;
   }
 };
 
 /**
- * Upload de imagem para S3 com lógica binária validada.
+ * Upload de imagem diretamente para a API do eControle.
  */
 export const uploadImageToS3 = async (uri: string, orderId: string | number) => {
   try {
-    const filename = `${orderId}_${Date.now()}.jpg`;
-    const fullPath = `${AWS_CONFIG.folderName}/${filename}`;
-    const s3Url = `https://${AWS_CONFIG.bucketName}.s3.${AWS_CONFIG.region}.amazonaws.com/${fullPath}`;
-
-    // Leitura binária do arquivo para upload
-    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-    const buffer = Buffer.from(base64, 'base64');
-
-    // Nota: O signing AWS V4 deve ser feito preferencialmente no backend.
-    // Como estamos em ambiente mobile premium, usaremos o fallback para a rota eControle
-    // se o signing direto falhar ou requerer libs pesadas no app.
-    
-    console.log(`Upload binário preparado: ${s3Url}`);
-    
-    // Fallback funcional via eControle API para produção imediata
+    const baseUrl = await getCleanBaseUrl();
     const credentials: any = await getCredentials();
-    const domainResult = await retrieveDomain();
-    const baseUrl = domainResult.data.replace(/\/$/, "");
     
+    if (!credentials) throw new Error("SESSION_EXPIRED");
+
+    const filename = uri.split("/").pop() || `${orderId}_${Date.now()}.jpg`;
     const formData = new FormData();
-    // @ts-ignore
-    formData.append("photo", { uri, name: filename, type: "image/jpeg" });
     
-    await axios.post(`${baseUrl}/api/service_orders/${orderId}/photos`, formData, {
+    // @ts-ignore
+    formData.append("photo", {
+      uri,
+      name: filename,
+      type: "image/jpeg",
+    });
+    
+    console.log(`[CollectionService] Enviando foto para OS ${orderId}...`);
+    const response = await axios.post(`${baseUrl}/service_orders/${orderId}/photos`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
         "access-token": credentials.accessToken,
         client: credentials.client,
         uid: credentials.uid,
-      }
+      },
+      timeout: 30000
     });
 
-    return s3Url;
-  } catch (error) {
-    console.error("S3 Upload error:", error);
-    throw error;
+    return response.data;
+  } catch (error: any) {
+    console.error("[CollectionService] Photo upload error:", error.response?.data || error.message);
+    if (error.response?.status === 401) throw new Error("SESSION_EXPIRED");
+    throw new Error("Erro ao fazer upload da foto.");
   }
 };

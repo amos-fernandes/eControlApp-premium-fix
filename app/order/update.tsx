@@ -1,6 +1,7 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Linking } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Linking, Image } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
 import {
@@ -54,12 +55,12 @@ export default function UpdateOrderScreen() {
   const [endKm, setEndKm] = useState("");
   const [certificateMemo, setCertificateMemo] = useState("");
   const [driverObservations, setDriverObservations] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Estados para MTR
   const [isMtrLoading, setIsMtrLoading] = useState(false);
   const [mtrResult, setMtrResult] = useState<any | null>(null);
-  const mtrScale = useRef(new Animated.Value(1)).current;
 
   // Busca dados da OS do cache
   const queryCache = queryClient.getQueryCache();
@@ -82,13 +83,13 @@ export default function UpdateOrderScreen() {
       CollectionService.getDraft(id).then(draft => {
         if (draft) {
           console.log("[UpdateOrder] Rascunho carregado:", draft);
-          if (draft.arrivalTime) setArrivalTime(draft.arrivalTime);
-          if (draft.departureTime) setDepartureTime(draft.departureTime);
-          if (draft.startKm) setStartKm(draft.startKm);
-          if (draft.endKm) setEndKm(draft.endKm);
-          if (draft.certificateMemo) setCertificateMemo(draft.certificateMemo);
-          if (draft.driverObservations) setDriverObservations(draft.driverObservations);
-          // Nota: Pesos e equipamentos serão mesclados no useEffect seguinte
+          if (draft.arrival_date) setArrivalTime(new Date(draft.arrival_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          if (draft.departure_date) setDepartureTime(new Date(draft.departure_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          if (draft.start_km) setStartKm(String(draft.start_km));
+          if (draft.end_km) setEndKm(String(draft.end_km));
+          if (draft.certificate_memo) setCertificateMemo(draft.certificate_memo);
+          if (draft.driver_observations) setDriverObservations(draft.driver_observations);
+          if (draft.photos) setPhotos(draft.photos);
         }
       });
     }
@@ -98,32 +99,36 @@ export default function UpdateOrderScreen() {
   useEffect(() => {
     if (id && order) {
       const dataToSave = {
-        arrivalTime,
-        departureTime,
-        startKm,
-        endKm,
-        certificateMemo,
-        driverObservations,
-        serviceWeights,
-        collectedEquipment,
-        lendedEquipment
+        arrival_date: arrivalTime ? new Date().toISOString() : undefined,
+        departure_date: departureTime ? new Date().toISOString() : undefined,
+        start_km: startKm,
+        end_km: endKm,
+        certificate_memo: certificateMemo,
+        driver_observations: driverObservations,
+        service_executions: serviceWeights.map(sw => ({
+          service_id: sw.serviceId,
+          amount: parseFloat(sw.weight.replace(",", ".")) || 0,
+        })),
+        collected_equipment: collectedEquipment.filter(eq => eq.selected),
+        lended_equipment: lendedEquipment.filter(eq => eq.selected),
+        photos: photos
       };
       CollectionService.saveDraft(id, dataToSave as any);
     }
-  }, [id, order, arrivalTime, departureTime, startKm, endKm, certificateMemo, driverObservations, serviceWeights, collectedEquipment, lendedEquipment]);
+  }, [id, order, arrivalTime, departureTime, startKm, endKm, certificateMemo, driverObservations, serviceWeights, collectedEquipment, lendedEquipment, photos]);
 
   // Inicializa dados da OS
   useEffect(() => {
     if (order) {
-      // Tenta recuperar do rascunho primeiro, senão usa da OS
       CollectionService.getDraft(id as string).then(draft => {
         if (order.service_executions) {
           const weights = order.service_executions.map((exec: ServiceExecution) => {
-            const draftWeight = draft?.serviceWeights?.find((sw: any) => String(sw.serviceId) === String(exec.service?.id));
+            // Busca peso no rascunho ou na OS
+            const draftWeight = draft?.service_executions?.find((sw: any) => String(sw.service_id) === String(exec.service?.id));
             return {
               serviceId: exec.service?.id || "",
               serviceName: exec.service?.name || "Serviço sem nome",
-              weight: draftWeight?.weight || "",
+              weight: draftWeight ? String(draftWeight.amount) : (exec.amount ? String(exec.amount) : ""),
               unit: exec.unit?.abbreviation || exec.unit?.name || "kg",
             };
           });
@@ -133,8 +138,8 @@ export default function UpdateOrderScreen() {
         if (order.collected_equipment) {
           setCollectedEquipment(
             order.collected_equipment.map((eq: any) => {
-              const draftEq = draft?.collectedEquipment?.find((deq: any) => String(deq.id) === String(eq.id));
-              return { ...eq, selected: draftEq ? draftEq.selected : false };
+              const draftEq = draft?.collected_equipment?.find((deq: any) => String(deq.id) === String(eq.id));
+              return { ...eq, selected: draftEq ? true : false };
             })
           );
         }
@@ -142,22 +147,15 @@ export default function UpdateOrderScreen() {
         if (order.lended_equipment) {
           setLendedEquipment(
             order.lended_equipment.map((eq: any) => {
-              const draftEq = draft?.lendedEquipment?.find((deq: any) => String(deq.id) === String(eq.id));
-              return { ...eq, selected: draftEq ? draftEq.selected : false };
+              const draftEq = draft?.lended_equipment?.find((deq: any) => String(deq.id) === String(eq.id));
+              return { ...eq, selected: draftEq ? true : false };
             })
           );
         }
 
-        // Se não houver rascunho para campos básicos, usa da OS
         if (!draft) {
-          if (order.arrival_date) {
-            const date = new Date(order.arrival_date);
-            setArrivalTime(date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-          }
-          if (order.departure_date) {
-            const date = new Date(order.departure_date);
-            setDepartureTime(date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-          }
+          if (order.arrival_date) setArrivalTime(new Date(order.arrival_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          if (order.departure_date) setDepartureTime(new Date(order.departure_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
           setStartKm(order.start_km || "");
           setEndKm(order.end_km || "");
           setCertificateMemo(order.certificate_memo || "");
@@ -166,6 +164,41 @@ export default function UpdateOrderScreen() {
       });
     }
   }, [order, id]);
+
+  const handleTakePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permissão negada", "Precisamos de acesso à câmera.");
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setPhotos(prev => [...prev, result.assets[0].uri]);
+    }
+  };
+
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      const uris = result.assets.map(a => a.uri);
+      setPhotos(prev => [...prev, ...uris]);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleOpenMap = () => {
     if (!order?.address) return;
@@ -201,29 +234,54 @@ export default function UpdateOrderScreen() {
 
   const handleSubmit = async () => {
     if (!order) return;
+
+    // VALIDAÇÕES OBRIGATÓRIAS
+    const filledWeights = serviceWeights.filter(sw => sw.weight && sw.weight.trim() !== "");
+    if (filledWeights.length === 0) {
+      Alert.alert("Atenção", "Informe o peso de ao menos um serviço.");
+      return;
+    }
+
+    if (!startKm || !endKm) {
+      Alert.alert("Atenção", "Informe o KM Inicial e Final.");
+      return;
+    }
+
+    if (photos.length === 0) {
+      Alert.alert("Atenção", "É obrigatório anexar ao menos uma foto da coleta.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const serviceExecutions = serviceWeights
-        .filter(sw => sw.weight && sw.weight.trim() !== "")
-        .map(sw => {
-          const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
-          return {
-            id: exec?.id || 0,
-            service_id: sw.serviceId,
-            amount: parseFloat(sw.weight.replace(",", ".")),
-          };
-        });
+      // Faz upload das fotos primeiro
+      console.log(`[UpdateOrder] Iniciando upload de ${photos.length} fotos...`);
+      for (const uri of photos) {
+        await CollectionService.uploadImageToS3(uri, order.id);
+      }
+
+      // Prepara os service_executions com status 'checking'
+      // O Ed solicitou passar TODOS os itens para 'checking'
+      const serviceExecutions = serviceWeights.map(sw => {
+        const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
+        return {
+          id: exec?.id || 0,
+          service_id: sw.serviceId,
+          amount: parseFloat(sw.weight.replace(",", ".")) || 0,
+          status: "checking" // CRUCIAL para mudar status da OS para "Em Conferência"
+        };
+      });
 
       const updates: CollectionService.CollectionData = {
         arrival_date: arrivalTime ? new Date().toISOString() : undefined,
         departure_date: departureTime ? new Date().toISOString() : undefined,
-        start_km: startKm || undefined,
-        end_km: endKm || undefined,
+        start_km: startKm,
+        end_km: endKm,
         certificate_memo: certificateMemo || undefined,
         driver_observations: driverObservations || undefined,
         collected_equipment: collectedEquipment.filter(eq => eq.selected),
         lended_equipment: lendedEquipment.filter(eq => eq.selected),
-        service_executions: serviceExecutions.length > 0 ? serviceExecutions : undefined,
+        service_executions: serviceExecutions,
       };
 
       await CollectionService.finishOrder(order.id, updates);
@@ -235,12 +293,13 @@ export default function UpdateOrderScreen() {
         }}
       ]);
     } catch (err: any) {
+      console.error("[UpdateOrder] Erro ao enviar:", err);
       if (err.message === "SESSION_EXPIRED") {
         const refreshed = await refreshCredentials();
         if (refreshed) Alert.alert("Sessão Renovada", "Tente enviar novamente.");
         else { logout(); router.replace("/(auth)/login"); }
       } else {
-        Alert.alert("Erro ao enviar", "Dados salvos localmente. Tente novamente mais tarde.");
+        Alert.alert("Erro ao enviar", "Não foi possível enviar os dados. O rascunho continua salvo.");
       }
     } finally { setIsSubmitting(false); }
   };
@@ -314,6 +373,37 @@ export default function UpdateOrderScreen() {
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.sectionHeader}>
+            <Feather name="camera" size={18} color={theme.textSecondary} />
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Fotos da Coleta (Obrigatório)</Text>
+          </View>
+          
+          <View style={styles.photoActions}>
+            <Pressable style={[styles.photoActionBtn, { backgroundColor: Colors.primary + "15" }]} onPress={handleTakePhoto}>
+              <Feather name="camera" size={20} color={Colors.primary} />
+              <Text style={[styles.photoActionText, { color: Colors.primary }]}>Tirar Foto</Text>
+            </Pressable>
+            <Pressable style={[styles.photoActionBtn, { backgroundColor: theme.surfaceSecondary }]} onPress={handlePickImage}>
+              <Feather name="image" size={20} color={theme.textSecondary} />
+              <Text style={[styles.photoActionText, { color: theme.textSecondary }]}>Galeria</Text>
+            </Pressable>
+          </View>
+
+          {photos.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoList}>
+              {photos.map((uri, index) => (
+                <View key={index} style={styles.photoContainer}>
+                  <Image source={{ uri }} style={styles.photoThumb} />
+                  <Pressable style={styles.removePhotoBtn} onPress={() => removePhoto(index)}>
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}><Feather name="message-circle" size={18} color={theme.textSecondary} /><Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Observações</Text></View>
           <TextInput
             style={[styles.input, { height: 80 }]}
@@ -367,6 +457,13 @@ const styles = StyleSheet.create({
   serviceName: { fontSize: 14 },
   input: { fontSize: 14, borderWidth: 1, borderRadius: 10, padding: 10, marginHorizontal: 12, marginBottom: 12 },
   row: { flexDirection: "row", gap: 0 },
+  photoActions: { flexDirection: "row", gap: 12, padding: 12 },
+  photoActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
+  photoActionText: { fontSize: 13, fontWeight: "600" },
+  photoList: { paddingHorizontal: 12, paddingBottom: 16, gap: 12 },
+  photoContainer: { width: 80, height: 80, borderRadius: 12, overflow: "hidden", position: "relative" },
+  photoThumb: { width: "100%", height: "100%" },
+  removePhotoBtn: { position: "absolute", top: 2, right: 2, backgroundColor: "#fff", borderRadius: 10 },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, borderTopWidth: 1, gap: 10 },
   mtrBtn: { backgroundColor: "#059669", padding: 14, borderRadius: 14, alignItems: "center" },
   mtrBtnText: { color: "#fff", fontWeight: "700" },

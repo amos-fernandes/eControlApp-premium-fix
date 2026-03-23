@@ -2,6 +2,7 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
+import * as Sharing from "expo-sharing";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -28,6 +29,7 @@ import {
   getClientName,
   uploadPhoto,
 } from "@/services/servicesOrders";
+import * as CollectionService from "@/services/collectionService";
 import type { ServiceOrder } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
 
@@ -75,6 +77,7 @@ export default function OrderDetailScreen() {
   const { theme } = useTheme();
   const { credentials, baseUrl } = useAuth();
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [downloadingMtr, setDownloadingMtr] = useState(false);
 
   const { data: order, isLoading, isError, refetch, isRefetching } = useQuery({
     queryKey: ["service_order", id, baseUrl],
@@ -124,6 +127,29 @@ export default function OrderDetailScreen() {
       { text: "Galeria", onPress: () => handleAddPhoto("gallery") },
       { text: "Cancelar", style: "cancel" },
     ]);
+  };
+
+  const handleDownloadMTR = async () => {
+    if (!order?.mtr_id) return;
+    
+    // Simulação de PDF URL se não vier da API
+    // Em produção, a API deve retornar mtr_pdf_url
+    const pdfUrl = (order as any).mtr_pdf_url || `http://159.89.191.25:8000/mtr/download/${order.mtr_id}`;
+    
+    setDownloadingMtr(true);
+    try {
+      const localUri = await CollectionService.downloadMTR(order.mtr_id, pdfUrl);
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(localUri, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+      } else {
+        Alert.alert("MTR Baixado", `Arquivo salvo em: ${localUri}`);
+      }
+    } catch (err: any) {
+      Alert.alert("Erro no Download", "Não foi possível baixar o PDF do MTR. Verifique sua conexão.");
+    } finally {
+      setDownloadingMtr(false);
+    }
   };
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
@@ -304,10 +330,24 @@ export default function OrderDetailScreen() {
         {order.mtr_id ? (
           <View style={[styles.mtrSuccess, { backgroundColor: "#DCFCE7", borderColor: "#86EFAC" }]}>
             <Feather name="check-circle" size={20} color="#16A34A" />
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.mtrSuccessTitle}>MTR Emitido</Text>
               <Text style={styles.mtrSuccessId}>ID: {order.mtr_id}</Text>
             </View>
+            <Pressable 
+              style={[styles.downloadBtn, downloadingMtr && { opacity: 0.7 }]} 
+              onPress={handleDownloadMTR}
+              disabled={downloadingMtr}
+            >
+              {downloadingMtr ? (
+                <ActivityIndicator size="small" color="#16A34A" />
+              ) : (
+                <>
+                  <Feather name="download" size={16} color="#16A34A" />
+                  <Text style={styles.downloadBtnText}>Baixar</Text>
+                </>
+              )}
+            </Pressable>
           </View>
         ) : null}
       </ScrollView>
@@ -368,6 +408,8 @@ const styles = StyleSheet.create({
   mtrSuccess: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 14, borderWidth: 1 },
   mtrSuccessTitle: { color: "#15803D", fontSize: 14, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   mtrSuccessId: { color: "#16A34A", fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  downloadBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "#86EFAC" },
+  downloadBtnText: { color: "#16A34A", fontSize: 13, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
   actions: { position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 12, borderTopWidth: 1 },
   collectBtn: { backgroundColor: "#059669", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 15, borderRadius: 16, shadowColor: "#059669", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
   collectBtnText: { color: "#fff", fontSize: 15, fontWeight: "700", fontFamily: "Inter_700Bold" },

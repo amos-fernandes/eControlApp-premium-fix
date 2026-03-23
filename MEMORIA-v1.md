@@ -1113,6 +1113,7 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ### **Novo Serviço de Coleta (CollectionService)** ✅
 - **MTR Webhook**: Integração com o webhook eControle (http://159.89.191.25:8000) para emissão pós-conferência.
+- **MTR Download**: Nova função `downloadMTR` integrada com `expo-file-system` e `expo-sharing` para baixar e abrir o manifesto em PDF.
 - **AWS S3**: Lógica de upload binário preparada e validada via script de teste.
 - **Finalização Robusta**: Função finishOrder que gerencia o ciclo de vida do envio e limpeza de cache.
 
@@ -1120,6 +1121,7 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 - **Teste de Integração**: Criado script scripts/comprehensive_integration_test.js.
 - **AWS S3**: Validado upload com **Status 200 OK** no bucket bkt-econtrole.
 - **MTR**: Lógica de token CETESB e Webhook validada com **10/11 testes aprovados**.
+- **Download**: Validada lógica de download de PDF e compartilhamento nativo.
 - **Navegabilidade**: Validada carga de **1186 OS** com filtragem de **542 ativas** no ambiente testeaplicativo.
 
 ---
