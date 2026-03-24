@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { FilterModal } from "@/components/FilterModal";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { ServiceOrderCard } from "@/components/ServiceOrderCard";
+import { LogisticsCard } from "@/components/LogisticsCard";
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
@@ -187,6 +188,9 @@ export default function OrdersScreen() {
             </Pressable>
           ) : null}
         </View>
+
+        {/* Card de Logística */}
+        <LogisticsCard />
 
         {hasActiveFilters ? (
           <View style={styles.filterPills}>

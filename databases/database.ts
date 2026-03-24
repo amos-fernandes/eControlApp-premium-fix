@@ -82,6 +82,69 @@ export const initDatabase = () => {
       draft_data TEXT,
       updated_at TEXT
     );
+
+    -- ============================================
+    -- TABELAS DE LOGÍSTICA (Feature v1.7.0)
+    -- ============================================
+    
+    -- Métricas diárias por motorista
+    CREATE TABLE IF NOT EXISTS daily_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id TEXT NOT NULL,
+      driver_name TEXT,
+      date TEXT NOT NULL,
+      total_os INTEGER DEFAULT 0,
+      total_km REAL DEFAULT 0,
+      total_fuel_liters REAL,
+      total_time_hours REAL DEFAULT 0,
+      on_time_deliveries INTEGER DEFAULT 0,
+      late_deliveries INTEGER DEFAULT 0,
+      avg_time_per_os REAL DEFAULT 0,
+      avg_km_per_os REAL DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(driver_id, date)
+    );
+
+    -- Métricas por veículo
+    CREATE TABLE IF NOT EXISTS vehicle_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vehicle_id TEXT NOT NULL,
+      vehicle_name TEXT,
+      date TEXT NOT NULL,
+      km_start REAL DEFAULT 0,
+      km_end REAL DEFAULT 0,
+      total_km REAL DEFAULT 0,
+      fuel_liters REAL,
+      os_count INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'operating',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(vehicle_id, date)
+    );
+
+    -- Métricas consolidadas mensais
+    CREATE TABLE IF NOT EXISTS monthly_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      month TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      total_os INTEGER DEFAULT 0,
+      total_km REAL DEFAULT 0,
+      total_fuel_liters REAL,
+      total_fuel_cost REAL,
+      avg_km_per_os REAL DEFAULT 0,
+      avg_time_per_os REAL DEFAULT 0,
+      fuel_efficiency REAL,
+      on_time_percentage REAL DEFAULT 0,
+      route_optimization_percentage REAL,
+      productivity REAL,
+      fleet_utilization REAL,
+      cost_savings REAL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(month, year)
+    );
+
+    -- ============================================
+    -- FIM DAS TABELAS DE LOGÍSTICA
+    -- ============================================
   `)
 }
 

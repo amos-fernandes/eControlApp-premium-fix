@@ -424,7 +424,6 @@ export function getRouteName(order: ServiceOrder | null | undefined): string {
   const routeName = 
     order.route_name || 
     order.collection_route || 
-    (order.route as any)?.name ||
     (order.address as any)?.route_name ||
     (order.customer as any)?.route_name;
   
