@@ -75,20 +75,19 @@ export function LogisticsCard({ onPress }: LogisticsCardProps) {
   });
   
   const handlePress = () => {
-    if (onPress) {
-      onPress();
-    } else {
-      // Se estiver encolhido, expande. Se estiver expandido, vai para tela completa
-      if (!isExpanded) {
-        toggleExpand();
-      } else {
-        router.push('/logistics');
-      }
-    }
+    // Apenas expande/recolhe, não navega
+    toggleExpand();
   };
   
   const handleSeeAll = () => {
     router.push('/logistics');
+  };
+  
+  const handleLongPress = () => {
+    // Long press vai direto para tela completa
+    if (isExpanded) {
+      router.push('/logistics');
+    }
   };
   
   if (isLoading || !kpis) {
@@ -104,7 +103,7 @@ export function LogisticsCard({ onPress }: LogisticsCardProps) {
     <Pressable 
       style={[styles.card, { backgroundColor: theme.surface }]}
       onPress={handlePress}
-      delayLongPress={200}
+      onLongPress={handleLongPress}
     >
       {/* Header (sempre visível) */}
       <View style={styles.header}>
@@ -121,7 +120,7 @@ export function LogisticsCard({ onPress }: LogisticsCardProps) {
               Logística
             </Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              {isExpanded ? 'Toque para ver detalhes' : 'Toque para expandir'}
+              {isExpanded ? 'Pressione e segure para ver tudo' : 'Toque para expandir'}
             </Text>
           </View>
         </View>
