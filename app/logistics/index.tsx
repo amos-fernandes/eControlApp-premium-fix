@@ -68,7 +68,7 @@ export default function LogisticsScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.surface }]}>
         <Text style={[styles.headerTitle, { color: theme.text }]}>
-          📊 Logística
+          Logística
         </Text>
         
         <PeriodSelector period={period} setPeriod={setPeriod} />
