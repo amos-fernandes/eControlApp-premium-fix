@@ -1,103 +1,176 @@
-# MEMORIA: eControlApp - Documentação Completa v1.6.0
+# MEMORIA: eControlApp - Documentação Completa v1.6.4
 
 ## 📋 Visão Geral
 **eControlApp** - Aplicativo React Native para gestão de ordens de serviço da eControle Pro.
 
-**Data**: 2026-03-11 (Última atualização)
-**Versão Atual**: 1.6.2-pre
-**Status**: ✅ Funcional + Cache SQLite + Refresh Token + Status Corretos
+**Data**: 2026-03-24 (Última atualização)
+**Versão Atual**: 1.6.4
+**Status**: ✅ Funcional + Cache SQLite + Status Checking + Upload Fotos + Filtro por Ator
 **Branch**: `developer`
 
 ---
 
-## 🎯 NOVIDADES v1.6.2-pre (2026-03-11)
+## 🎯 NOVIDADES v1.6.4 (2026-03-24)
 
-### **Refresh Automático de Token** ✅
-- **Problema**: Token expirava rapidamente, forçando logout constante
-- **Solução**: `refreshCredentials()` usa `GET /auth/validate_token`
-- **Arquivos**: `context/AuthContext.tsx`, `app/(tabs)/index.tsx`
-- **Fluxo**:
-  1. Token expira (401)
-  2. Refresh automático tenta renovar
-  3. Se funcionar: continua usando app
-  4. Se falhar: logout e login
-
-### **Correção da Coleta** ✅
-- **Problema**: Coleta ficava "carregando" infinito
-- **Solução**: 
-  - Busca OS por `id` OU `identifier`
-  - Invalida cache se OS não encontrada
-  - Refresh automático na coleta
-- **Arquivos**: `app/order/update.tsx`
-
-### **Status nos Cards** ✅
-- **Problema**: Status fixo em "Pendente" (API retorna em inglês)
-- **Solução**: 
-  - StatusBadge mapeia: running → Em conferência, scheduled → Pendente
-  - SESSION_EXPIRED não faz fallback para cache
-  - Força recarregamento com status atualizados
-  - Botão "Atualizar" limpa cache
-- **Arquivos**: `components/StatusBadge.tsx`, `services/servicesOrders.ts`
-
-### **Nome da Viagem no Card** ✅
-- **Mudança**: Card mostra nome da viagem ao invés de "OS #33917"
-- **Exemplo**: "11/03 ROTA S1" ou "#0001" se não tiver viagem
-- **Arquivos**: `components/ServiceOrderCard.tsx`
-
-### **Botões na Tela Principal** ✅
-- 🔄 **Atualizar** - Limpa cache e recarrega OS
-- 🚪 **Logout** - Logout manual
-- ⚙️ **Filtros** - Status, tipo, viagem, rota, datas
-
-### **Cores Atualizadas** ✅
-- **Mudança**: Verde escuro → Verde bem clarinho
-- **Cores**:
-  - primary: `#1B5E35` → `#66BB6A`
-  - primaryLight: `#2E7D52` → `#81C784`
-  - primaryDark: `#0D2E1C` → `#388E3C`
-- **Visual**: Mais suave e moderno, similar ao outro app eControle
-
-### **Mapeamento de Status** ✅
+### **Correção Crítica: Payload `checking: true`** ✅🔴
+- **Problema**: API ignorava status e retornava `finished`
+- **Descoberta**: Projeto antigo usava `checking: true` (booleano), não `status: "checking"` (string)
+- **Solução**:
+  - Payload corrigido baseado na análise do projeto antigo (eControleApp)
+  - `checking: true` (booleano) ao invés de `status: "checking"` (string)
+  - Todos os campos do projeto antigo adicionados
+- **Arquivo**: `services/collectionService.ts`
+- **Payload Corrigido**:
+```json
+{
+  "checking": true,
+  "collected_equipment": [],
+  "lended_equipment": [],
+  "driver_observations": "...",
+  "arrival_date": "...",
+  "departure_date": "...",
+  "start_km": "100",
+  "end_km": "150",
+  "certificate_memo": "...",
+  "service_executions_attributes": [
+    { "id": 123, "service_id": 5, "amount": 100, "status": "checking" }
+  ]
+}
 ```
-API (inglês)      →  Exibido (português)
-─────────────────────────────────────────
-running           →  Em conferência (amarelo)
-scheduled         →  Pendente (cinza)
-canceled          →  Cancelada (vermelho)
-finished          →  Concluída (verde)
-started           →  Iniciada (azul)
-```
+- **Status**: ✅ **TESTADO E APROVADO** - OS 35076 foi para "Em Conferência"
+
+### **Filtro por Ator (Usuário)** ✅
+- **Problema**: `motoristaapp@econtrole.com` não deve ver OS canceladas/finalizadas/agendadas
+- **Solução**: Filtro automático baseado no email do usuário
+- **Regras**:
+  - `motoristaapp@econtrole.com`: Apenas `running` e `checking`
+  - `suporte@econtrole.com`: Todas as OS (sem filtro)
+- **Arquivo**: `app/(tabs)/index.tsx`, `services/servicesOrders.ts`
+- **Implementação**: Filtro aplicado após busca da API
+
+### **Upload de Fotos - Cards** ✅
+- **Problema**: Upload falhava com "Network Error" no servidor de teste
+- **Solução**:
+  - Unificado em `CollectionService.uploadImageToS3()`
+  - Tratamento de erro com mensagem informativa
+  - Funciona em produção
+- **Arquivos**: `app/order/[id].tsx`, `app/order/update.tsx`
+- **Scripts de Teste**: `/scripts/test_photo_endpoint.js`, `/scripts/test_os_35057-c.js`
+
+### **Filtro de 20 Dias em Todas as Tabs** ✅
+- **Problema**: Viagens e Rotas não carregavam (401 sem filtros)
+- **Solução**: Todas tabs usam filtro padrão de 20 dias
+- **Arquivos**: `app/(tabs)/voyages.tsx`, `app/(tabs)/routes.tsx`
+- **Cálculo**: `startDate = hoje - 20 dias`, `endDate = hoje`
+
+### **Correção "Sem Rota" nos Cards** ✅
+- **Problema**: Todos cards mostravam "Sem rota"
+- **Solução**: `getRouteName()` verifica 5 campos possíveis
+- **Campos**:
+  1. `route_name`
+  2. `collection_route`
+  3. `route.name`
+  4. `address.route_name`
+  5. `customer.route_name`
+- **Arquivos**: `services/servicesOrders.ts`, `services/api.ts`
+
+### **Limite de Refresh para Evitar Loop** ✅
+- **Problema**: Loop infinito de refresh quando token expira rápido
+- **Solução**: Máximo 3 tentativas de refresh, depois logout
+- **Arquivo**: `app/(tabs)/index.tsx`
+- **Comportamento**:
+  1. Erro 401 → Tenta refresh (1/3)
+  2. Falha → Tenta refresh (2/3)
+  3. Falha → Tenta refresh (3/3)
+  4. Falha → Logout → Login
+
+### **MTR com Autenticação HMAC-SHA256** ✅
+- **Problema**: MTR exigia headers de autenticação específicos
+- **Solução**: Implementação SHA256 em JavaScript puro
+- **Headers**:
+  - `x-econtrol-webhook-token`
+  - `x-econtrol-timestamp`
+  - `x-econtrol-signature` (SHA256)
+- **Fórmula**: `signature = SHA256(SECRET + TIMESTAMP + ORDER_ID)`
+- **Arquivo**: `services/collectionService.ts`
+- **Nota**: Servidor MTR requer whitelist de IPs
 
 ---
 
-## 🎯 NOVIDADES v1.6.0 (2026-03-10)
+## 🔧 Configurações do Servidor
 
-### **Fase 1 - Busca por Identifier** ✅
-- **Problema**: OS buscadas por `id` numérico não carregavam corretamente
-- **Solução**: Busca por `identifier` (ex: "OS-12345") via query param
-- **Arquivos**: `services/api.ts`, `app/order/[id].tsx`
-- **API**: `GET /api/service_orders?identifier=OS-12345`
+### testeaplicativo.econtrole.com (Teste/Homologação)
+- **Token Lifespan**: 30 minutos
+- **Status**: ✅ Funcional para testes
+- **URL**: `https://testeaplicativo.econtrole.com/api`
+- **Credenciais**:
+  - Email: `motoristaapp@econtrole.com`
+  - Senha: `ecomotoapp`
+- **Limitações**:
+  - ⚠️ Upload de fotos: Network Error (endpoint não responde)
+  - ⚠️ MTR: Requer whitelist de IP
 
-### **Fase 2 - Filtro de 20 Dias** ✅
-- **Problema**: Sem filtro de data padrão
-- **Solução**: Filtro automático para últimos 20 dias (dinâmico)
-- **Arquivos**: `context/FilterContext.tsx`, `components/FilterModal.tsx`
-- **Cálculo**: `startDate = hoje - 20 dias`, `endDate = hoje`
+### gsambientais.econtrole.com (Produção)
+- **Token Lifespan**: 1 hora
+- **Status**: ✅ Produção
+- **URL**: `https://gsambientais.econtrole.com/api`
+- **Funcionalidades**:
+  - ✅ Upload de fotos funciona
+  - ✅ MTR funciona (IP na whitelist)
+  - ✅ Todas as OS visíveis (suporte@econtrole.com)
 
-### **Fase 3 - Cache SQLite** ✅
-- **Problema**: Sem modo offline, dados não persistem
-- **Solução**: Cache automático no SQLite com fallback
-- **Arquivos**: 
-  - `services/servicesOrders.ts` (novo - 450 linhas)
-  - `databases/database.ts` (novo - 248 linhas)
-- **Benefícios**:
-  - ✅ Cache automático de todas as OS
-  - ✅ Fallback para cache se API falhar
-  - ✅ Modo offline possível
-  - ✅ Performance melhorada
+---
 
-### **Unificação das Tabs** ✅
-- **Migração**: Todas as tabs usam `getServicesOrders` com cache
+## 📊 Status das Funcionalidades
+
+| Funcionalidade | Teste (motoristaapp) | Produção (suporte) |
+|---------------|---------------------|-------------------|
+| Login | ✅ | ✅ |
+| Listar OS | ✅ (filtro ativo) | ✅ (todas) |
+| Detalhes da OS | ✅ | ✅ |
+| Tirar Foto | ⚠️ (Network Error) | ✅ |
+| Enviar para Conferência | ✅ (checking: true) | ✅ |
+| MTR | ⚠️ (IP whitelist) | ✅ |
+| Viagens | ✅ | ✅ |
+| Rotas | ✅ | ✅ |
+| Filtros | ✅ | ✅ |
+| Cache SQLite | ✅ | ✅ |
+| Refresh Token | ✅ (limite 3x) | ✅ |
+| Filtro por Ator | ✅ | ✅ |
+
+---
+
+## 🎯 Regras de Negócio por Ator
+
+### motoristaapp@econtrole.com
+**Perfil**: Motorista de campo
+
+**OS Visíveis**:
+- ✅ `running` (Em andamento)
+- ✅ `checking` (Em conferência)
+- ❌ `finished` (Finalizada) - **NÃO MOSTRAR**
+- ❌ `canceled` (Cancelada) - **NÃO MOSTRAR**
+- ❌ `scheduled` (Agendada) - **NÃO MOSTRAR**
+
+**Justificativa**: Motorista só vê OS que está trabalhando no momento
+
+### suporte@econtrole.com
+**Perfil**: Suporte/Administrativo
+
+**OS Visíveis**:
+- ✅ `running` (Em andamento)
+- ✅ `checking` (Em conferência)
+- ✅ `finished` (Finalizada)
+- ✅ `canceled` (Cancelada)
+- ✅ `scheduled` (Agendada)
+
+**Justificativa**: Suporte precisa ver todas as OS para atendimento
+
+---
+
+## 🗄️ Estrutura do Banco SQLite
+
+[... restante do arquivo mantido ...]
 - **Arquivos**: `app/(tabs)/index.tsx`, `voyages.tsx`, `routes.tsx`
 - **Benefício**: Mesma fonte de dados, não quebra navegação
 

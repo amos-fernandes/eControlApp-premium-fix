@@ -115,15 +115,39 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       orders = orders.filter((o) => {
         const status = (o.status || "").toLowerCase();
         // Não mostramos finalizadas ou canceladas no modo 'Todos'
-        if (status === "finished" || status === "concluída" || status === "concluida" || 
+        if (status === "finished" || status === "concluída" || status === "concluida" ||
             status === "canceled" || status === "cancelada") {
           return false;
         }
         // Mostramos apenas as que estão atuando ou pendentes
-        return true; 
+        return true;
       });
     }
     // ----------------------------
+
+    // --- FILTRO POR ATOR (USUÁRIO) ---
+    // motoristaapp@econtrole.com: NÃO vê OS finalizadas, canceladas ou agendadas
+    // suporte@econtrole.com: Vê TODAS as OS
+    const userEmail = credentials.uid?.toLowerCase() || "";
+    const isMotorista = userEmail.includes("motoristaapp");
+    
+    if (isMotorista && !filters.status) {
+      console.log("getServicesOrders: Filtro por ATOR (motoristaapp) - excluindo finished/canceled/scheduled");
+      orders = orders.filter((o) => {
+        const status = (o.status || "").toLowerCase();
+        // Motorista só vê running e checking
+        if (status === "finished" || status === "concluída" || status === "concluida" ||
+            status === "canceled" || status === "cancelada" ||
+            status === "scheduled" || status === "agendada") {
+          return false;
+        }
+        return true;
+      });
+      console.log(`getServicesOrders: ${orders.length} orders after actor filter (motoristaapp)`);
+    } else if (userEmail.includes("suporte")) {
+      console.log("getServicesOrders: Filtro por ATOR (suporte) - mostrando TODAS as OS");
+    }
+    // ---------------------------------
 
     console.log(`getServicesOrders: Received ${orders.length} orders after filtering`);
     
@@ -423,7 +447,16 @@ export function getAddressName(order: ServiceOrder | null | undefined): string {
  */
 export function getRouteName(order: ServiceOrder | null | undefined): string {
   if (!order) return "Sem Rota";
-  return (order as any).route_name || (order as any).collection_route || "Sem Rota";
+  
+  // Verifica múltiplos campos possíveis para o nome da rota
+  const routeName = 
+    (order as any).route_name || 
+    (order as any).collection_route || 
+    (order as any).route?.name ||
+    (order as any).address?.route_name ||
+    (order as any).customer?.route_name;
+  
+  return routeName || "Sem Rota";
 }
 
 /**

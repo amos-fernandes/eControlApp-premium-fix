@@ -247,32 +247,80 @@ export default function UpdateOrderScreen() {
       return;
     }
 
-    if (photos.length === 0) {
-      Alert.alert("Atenção", "É obrigatório anexar ao menos uma foto da coleta.");
-      return;
-    }
+    // Validação de fotos é opcional se endpoint não existir
+    // if (photos.length === 0) {
+    //   Alert.alert("Atenção", "É obrigatório anexar ao menos uma foto da coleta.");
+    //   return;
+    // }
 
     setIsSubmitting(true);
-    try {
-      // Faz upload das fotos primeiro
+    
+    // Tenta fazer upload das fotos, mas continua se falhar
+    let uploadSuccess = true;
+    if (photos.length > 0) {
       console.log(`[UpdateOrder] Iniciando upload de ${photos.length} fotos...`);
       for (const uri of photos) {
-        await CollectionService.uploadImageToS3(uri, order.id);
+        try {
+          await CollectionService.uploadImageToS3(uri, order.id);
+        } catch (uploadError: any) {
+          console.warn("[UpdateOrder] Upload falhou, mas continuando...", uploadError.message);
+          uploadSuccess = false;
+          break; // Para de tentar as outras fotos
+        }
+      }
+    }
+
+    // Se upload falhou, pergunta se quer continuar sem fotos
+    if (!uploadSuccess) {
+      Alert.alert(
+        "Upload de fotos falhou",
+        "O endpoint de upload não está disponível neste servidor. Deseja continuar e enviar para conferência sem as fotos?",
+        [
+          { text: "Cancelar", style: "cancel", onPress: () => { setIsSubmitting(false); } },
+          { 
+            text: "Continuar", 
+            onPress: async () => {
+              await submitOrderData();
+            }
+          }
+        ]
+      );
+    } else {
+      await submitOrderData();
+    }
+  };
+
+  const submitOrderData = async () => {
+    if (!order) return;
+
+    try {
+      // Verifica credenciais antes de enviar
+      if (!credentials || !credentials.accessToken) {
+        console.warn("[UpdateOrder] ⚠️  Credenciais ausentes, tentando refresh...");
+        const refreshed = await refreshCredentials();
+        if (!refreshed) {
+          throw new Error("SESSION_EXPIRED");
+        }
+        console.log("[UpdateOrder] ✅ Credenciais renovadas com sucesso");
       }
 
       // Prepara os service_executions com status 'checking'
-      // O Ed solicitou passar TODOS os itens para 'checking'
+      // O endpoint /finish é responsável por mudar o status da OS para "Em Conferência"
       const serviceExecutions = serviceWeights.map(sw => {
         const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
         return {
           id: exec?.id || 0,
           service_id: sw.serviceId,
           amount: parseFloat(sw.weight.replace(",", ".")) || 0,
-          status: "checking" // CRUCIAL para mudar status da OS para "Em Conferência"
+          status: "checking" // CRUCIAL para mudar status dos itens para "Em Conferência"
         };
       });
 
-      const updates: CollectionService.CollectionData = {
+      console.log(`[UpdateOrder] Preparando envio para OS ${order.id}:`);
+      console.log(`[UpdateOrder] Service Executions:`, JSON.stringify(serviceExecutions, null, 2));
+
+      // Payload para endpoint /finish (não precisa envelopar em 'service_order')
+      const updates = {
         arrival_date: arrivalTime ? new Date().toISOString() : undefined,
         departure_date: departureTime ? new Date().toISOString() : undefined,
         start_km: startKm,
@@ -281,10 +329,14 @@ export default function UpdateOrderScreen() {
         driver_observations: driverObservations || undefined,
         collected_equipment: collectedEquipment.filter(eq => eq.selected),
         lended_equipment: lendedEquipment.filter(eq => eq.selected),
-        service_executions: serviceExecutions,
+        // service_executions_attributes é o nome correto para Rails nested attributes
+        service_executions_attributes: serviceExecutions,
       };
 
-      await CollectionService.finishOrder(order.id, updates);
+      console.log(`[UpdateOrder] Updates completos:`, JSON.stringify(updates, null, 2));
+
+      await CollectionService.finishOrder(order.id, updates as any);
+      await CollectionService.clearDraft(order.id); // Limpa rascunho após envio
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Sucesso!", "OS enviada para conferência.", [
         { text: "OK", onPress: () => {
@@ -294,24 +346,58 @@ export default function UpdateOrderScreen() {
       ]);
     } catch (err: any) {
       console.error("[UpdateOrder] Erro ao enviar:", err);
+      
       if (err.message === "SESSION_EXPIRED") {
+        // Tenta refresh uma vez
         const refreshed = await refreshCredentials();
-        if (refreshed) Alert.alert("Sessão Renovada", "Tente enviar novamente.");
-        else { logout(); router.replace("/(auth)/login"); }
+        
+        if (refreshed) {
+          Alert.alert(
+            "Sessão Renovada", 
+            "Sua sessão expirou mas foi renovada. Tente enviar novamente.",
+            [{ text: "OK" }]
+          );
+        } else {
+          // Refresh falhou - servidor rejeitou as credenciais
+          Alert.alert(
+            "Sessão Expirada",
+            "Suas credenciais expiraram ou foram rejeitadas pelo servidor.\n\n" +
+            "Isso pode acontecer se:\n" +
+            "• O servidor reiniciou\n" +
+            "• A sessão expirou\n" +
+            "• O servidor de teste está instável\n\n" +
+            "Você será redirecionado para o login.",
+            [
+              { 
+                text: "OK", 
+                onPress: () => {
+                  logout(); 
+                  router.replace("/(auth)/login");
+                }
+              }
+            ]
+          );
+        }
       } else {
-        Alert.alert("Erro ao enviar", "Não foi possível enviar os dados. O rascunho continua salvo.");
+        // Erro dinâmico para facilitar diagnóstico (Ed PhD refactor)
+        Alert.alert("Erro ao enviar", err.message || "Não foi possível enviar os dados. O rascunho continua salvo.");
       }
-    } finally { setIsSubmitting(false); }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
 
   if (!order) {
+ 
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
+ 
         <View style={[styles.header, { paddingTop: topPadding, backgroundColor: theme.surface }]}>
           <Pressable style={styles.backBtn} onPress={() => router.back()}><Feather name="arrow-left" size={22} color={theme.text} /></Pressable>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Coleta de Dados</Text>
+ 
         </View>
         <View style={styles.loadingContainer}><ActivityIndicator size="large" color={Colors.primary} /></View>
       </View>

@@ -41,13 +41,22 @@ export default function VoyagesScreen() {
     queryKey: ["service_orders_voyages", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      // Busca todas as OS (sem filtros) com cache SQLite
+      
+      // Filtro padrão de 20 dias (igual à tela principal)
+      const now = new Date();
+      const twentyDaysAgo = new Date(now);
+      twentyDaysAgo.setDate(twentyDaysAgo.getDate() - 20);
+      
+      const startDate = twentyDaysAgo.toISOString().split('T')[0];
+      const endDate = now.toISOString().split('T')[0];
+      
+      // Busca OS dos últimos 20 dias com cache SQLite
       return getServicesOrders({
         filters: {
           status: "",
           so_type: "",
-          start_date: "",
-          end_date: "",
+          start_date: startDate,
+          end_date: endDate,
           voyage: "",
         },
       });

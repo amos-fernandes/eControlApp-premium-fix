@@ -2,11 +2,10 @@ const axios = require('axios');
 
 const TEST_CONFIG = {
   baseUrl: 'https://testeaplicativo.econtrole.com/api', // Já contém /api
-  email: 'suporte@econtrole.com',
+  email: 'motoristaapp@econtrole.com',
   password: 'ecomotoapp',
-  osId: 35075
+  osId: 35071
 };
-
 
 async function runSpecificTest() {
   console.log(`🚀 Iniciando Fluxo Completo (Padrão v1.7.0 PhD) para OS #${TEST_CONFIG.osId}...`);
@@ -60,28 +59,7 @@ async function runSpecificTest() {
     const os = osRes.data.data || osRes.data;
     console.log(`✅ OS Localizada. Status Atual: ${os.status}`);
 
-    // 3. ENVIAR PARA CONFERÊNCIA (PUT com status 'checking')
-    console.log('\n📤 3. Enviando para Conferência (v1.7.0 PUT pattern)...');
-    const finishData = {
-      arrival_date: new Date().toISOString(),
-      departure_date: new Date().toISOString(),
-      start_km: "500",
-      end_km: "520",
-      driver_observations: "Validado via script PhD v1.7.0 - OS #35057",
-      status: "checking", // OBRIGATÓRIO para mover para conferência (Em Conferência)
-      service_executions_attributes: os.service_executions ? os.service_executions.map(e => ({ 
-        id: e.id, 
-        amount: 1 
-      })) : []
-    };
-
-    // Padrão CollectionService.ts: PUT em /service_orders/:id envelopado em service_order
-    const finishRes = await axios.put(
-      `${TEST_CONFIG.baseUrl}/service_orders/${TEST_CONFIG.osId}`, 
-      { service_order: finishData }, 
-      { headers }
-    );
-    console.log('✅ OS enviada para conferência com sucesso!');
+  
 
     // 4. EMITIR MTR (WEBHOOK ECONTROLE)
     console.log('\n📜 4. Emitindo MTR Webhook...');

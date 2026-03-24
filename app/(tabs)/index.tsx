@@ -33,6 +33,8 @@ export default function OrdersScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [localSearch, setLocalSearch] = useState("");
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [refreshAttempts, setRefreshAttempts] = useState(0);
+  const MAX_REFRESH_ATTEMPTS = 3; // Limite de tentativas de refresh
 
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["service_orders", filters, baseUrl],
@@ -74,24 +76,38 @@ export default function OrdersScreen() {
   const handleError = useCallback(async () => {
     if (error instanceof Error && error.message === "SESSION_EXPIRED") {
       console.log("[IndexScreen] SESSION_EXPIRED - Attempting refresh...");
-      
+      console.log(`[IndexScreen] Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
+
+      // Verifica se excedeu limite de tentativas
+      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+        console.error("[IndexScreen] ❌ Max refresh attempts reached - logging out");
+        await logout();
+        setRefreshAttempts(0); // Reset para próximo login
+        setTimeout(() => {
+          router.replace("/(auth)/login");
+        }, 100);
+        return;
+      }
+
       // Tenta refresh automático
       const refreshed = await refreshCredentials();
-      
+
       if (refreshed) {
         console.log("[IndexScreen] Refresh successful - retrying request");
+        setRefreshAttempts(0); // Reset após sucesso
         // Refresh bem-sucedido - tenta recarregar os dados
         refetch();
       } else {
         console.log("[IndexScreen] Refresh failed - logging out");
         // Refresh falhou - faz logout
         await logout();
+        setRefreshAttempts(0); // Reset para próximo login
         setTimeout(() => {
           router.replace("/(auth)/login");
         }, 100);
       }
     }
-  }, [error, logout, router, refreshCredentials, refetch]);
+  }, [error, logout, router, refreshCredentials, refetch, refreshAttempts]);
 
   // Usar useEffect para chamar handleError depois do render
   useEffect(() => {
@@ -130,7 +146,6 @@ export default function OrdersScreen() {
                 refetch();
               }}
               style={[styles.filterBtn, { marginRight: 0 }]}
-              title="Atualizar"
             >
               <Feather name="refresh-cw" size={16} color={theme.textSecondary} />
             </Pressable>
@@ -141,7 +156,6 @@ export default function OrdersScreen() {
                 router.replace("/(auth)/login");
               }}
               style={[styles.filterBtn, { marginRight: 0 }]}
-              title="Logout"
             >
               <Feather name="log-out" size={16} color="#EF4444" />
             </Pressable>

@@ -341,7 +341,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       console.log("[AuthContext] Refreshing credentials...");
-      
+      console.log("[AuthContext] Base URL:", baseUrl);
+      console.log("[AuthContext] Token (partial):", credentials.accessToken?.substring(0, 10) + "...");
+
       // Devise Token Auth: GET /auth/validate_token renova os headers
       const url = `${baseUrl}/auth/validate_token`;
       const headers = {
@@ -350,6 +352,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         client: credentials.client,
         uid: credentials.uid,
       };
+
+      console.log("[AuthContext] Refresh URL:", url);
+      console.log("[AuthContext] Headers:", {
+        "access-token": credentials.accessToken?.substring(0, 10) + "...",
+        client: credentials.client?.substring(0, 10) + "...",
+        uid: credentials.uid?.substring(0, 10) + "..."
+      });
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
@@ -362,13 +371,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       clearTimeout(timeout);
 
+      console.log("[AuthContext] Refresh response status:", response.status);
+
       if (response.status === 401) {
-        console.log("[AuthContext] Refresh failed - token expired");
+        console.log("[AuthContext] Refresh failed - token expired (401)");
+        console.warn("[AuthContext] ⚠️  Servidor rejeitou o token. Pode ser necessário fazer login novamente.");
         return false;
       }
 
       if (!response.ok) {
         console.log("[AuthContext] Refresh failed - status", response.status);
+        const responseText = await response.text().catch(() => "N/A");
+        console.error("[AuthContext] Response body:", responseText.substring(0, 200));
         return false;
       }
 
@@ -376,6 +390,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newAccessToken = response.headers.get("access-token") || credentials.accessToken;
       const newClient = response.headers.get("client") || credentials.client;
       const newUid = response.headers.get("uid") || credentials.uid;
+
+      // Verifica se os headers vieram vazios
+      if (!newAccessToken || !newClient) {
+        console.warn("[AuthContext] ⚠️  Refresh não retornou novos headers, mantendo atuais");
+      }
 
       // Atualiza credenciais se vieram novos headers
       const updatedCreds: Credentials = {
@@ -387,7 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setCredentials(updatedCreds);
       await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
-      
+
       // Atualiza no SQLite
       insertCredentials({
         _id: 'main',
@@ -396,10 +415,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         client: newClient,
       });
 
-      console.log("[AuthContext] Credentials refreshed successfully");
+      console.log("[AuthContext] ✅ Credentials refreshed successfully");
       return true;
-    } catch (error) {
-      console.error("[AuthContext] Refresh error:", error);
+    } catch (error: any) {
+      console.error("[AuthContext] Refresh error:", error.message);
+      if (error.name === "AbortError") {
+        console.error("[AuthContext] Timeout no refresh - servidor não respondeu em 10s");
+      }
       return false;
     }
   }, [credentials, baseUrl]);

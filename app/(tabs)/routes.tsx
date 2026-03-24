@@ -36,13 +36,22 @@ export default function RoutesScreen() {
     queryKey: ["service_orders_routes", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      // Busca todas as OS (sem filtros) com cache SQLite
+
+      // Filtro padrão de 20 dias (igual à tela principal)
+      const now = new Date();
+      const twentyDaysAgo = new Date(now);
+      twentyDaysAgo.setDate(twentyDaysAgo.getDate() - 20);
+
+      const startDate = twentyDaysAgo.toISOString().split('T')[0];
+      const endDate = now.toISOString().split('T')[0];
+
+      // Busca OS dos últimos 20 dias com cache SQLite
       return getServicesOrders({
         filters: {
           status: "",
           so_type: "",
-          start_date: "",
-          end_date: "",
+          start_date: startDate,
+          end_date: endDate,
           voyage: "",
         },
       });
@@ -68,7 +77,7 @@ export default function RoutesScreen() {
   const routeGroups = useMemo(() => {
     const routes: Record<string, Record<string, ServiceOrder[]>> = {};
     (data || []).forEach((o) => {
-      if (!o) return; // Skip null/undefined values
+      if (!o) return;
       const route = getRouteName(o);
       const voyage = getVoyageName(o) || "Sem Viagem";
       if (!routes[route]) routes[route] = {};
@@ -79,7 +88,7 @@ export default function RoutesScreen() {
       routeName,
       voyages: Object.entries(voyages).map(([voyageName, orders]) => ({
         voyageName,
-        orders: orders.filter((o): o is ServiceOrder => !!o), // Filter out null/undefined values
+        orders: orders.filter((o): o is ServiceOrder => !!o),
       })),
       totalOrders: Object.values(voyages).reduce((sum, os) => sum + os.length, 0),
     }));

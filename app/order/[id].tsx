@@ -27,7 +27,6 @@ import {
   getVoyageName,
   getAddressName,
   getClientName,
-  uploadPhoto,
 } from "@/services/servicesOrders";
 import * as CollectionService from "@/services/collectionService";
 import type { ServiceOrder } from "@/services/api";
@@ -109,13 +108,27 @@ export default function OrderDetailScreen() {
 
     setUploadingPhoto(true);
     try {
-      await uploadPhoto({ baseUrl, credentials }, order.id, result.assets[0].uri);
+      // Usa o mesmo endpoint de upload do CollectionService
+      await CollectionService.uploadImageToS3(result.assets[0].uri, order.id);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       refetch();
       Alert.alert("Foto enviada", "Foto adicionada com sucesso.");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Não foi possível enviar a foto.";
-      Alert.alert("Erro", msg);
+    } catch (err: any) {
+      console.error("[OrderDetail] Photo upload error:", err.message);
+      
+      // Tratamento específico para Network Error
+      if (err.message.includes("Network Error") || err.message.includes("Network request failed")) {
+        Alert.alert(
+          "Upload indisponível",
+          "O servidor de upload de fotos não está respondendo.\n\n" +
+          "Isso pode ser uma limitação do servidor de teste.\n\n" +
+          "Dica: Use a tela de coleta para enviar fotos junto com os dados.",
+          [{ text: "OK" }]
+        );
+      } else {
+        const msg = err.message || "Não foi possível enviar a foto.";
+        Alert.alert("Erro", msg);
+      }
     } finally {
       setUploadingPhoto(false);
     }

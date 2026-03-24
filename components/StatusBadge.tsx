@@ -9,17 +9,19 @@ interface StatusBadgeProps {
 
 // Status da API (inglês) → Status exibido (português)
 const STATUS_MAP: Record<string, string> = {
-  "running": "Em conferência",
+  "running": "Iniciada",
+  "checking": "Em conferência",
   "scheduled": "Pendente",
   "canceled": "Cancelada",
   "finished": "Concluída",
   "started": "Iniciada",
   // Já em português (fallback)
+  "Iniciada": "Iniciada",
   "Em conferência": "Em conferência",
   "Pendente": "Pendente",
   "Cancelada": "Cancelada",
   "Concluída": "Concluída",
-  "Iniciada": "Iniciada",
+  
 };
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {

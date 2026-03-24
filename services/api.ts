@@ -419,7 +419,16 @@ export function hasVoyage(order: ServiceOrder | null | undefined): boolean {
 
 export function getRouteName(order: ServiceOrder | null | undefined): string {
   if (!order) return "Sem Rota";
-  return order.route_name || order.collection_route || "Sem Rota";
+  
+  // Verifica múltiplos campos possíveis para o nome da rota
+  const routeName = 
+    order.route_name || 
+    order.collection_route || 
+    (order.route as any)?.name ||
+    (order.address as any)?.route_name ||
+    (order.customer as any)?.route_name;
+  
+  return routeName || "Sem Rota";
 }
 
 export function getAddressName(order: ServiceOrder | null | undefined): string {

@@ -120,12 +120,20 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
   };
 
   const handleApply = () => {
-    onApply(local);
+    console.log("[FilterModal] Aplicando filtros:", local);
+    
+    // Se status for "acting", envia vazio (servicesOrders trata como "atuando")
+    const filtersToApply = { ...local };
+    if (filtersToApply.status === "acting") {
+      filtersToApply.status = ""; // Vazio = acting (running + scheduled)
+    }
+    
+    onApply(filtersToApply);
     onClose();
   };
 
   const handleReset = () => {
-    // Helper para calcular datas
+    // Reset para filtro padrão de 20 dias (igual ao FilterContext)
     const getDateDaysAgo = (days: number): string => {
       const date = new Date();
       date.setDate(date.getDate() - days);
@@ -139,11 +147,15 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysAgo(7), // Últimos 20 dias
-      endDate: (getTodayDate())+(getTodayDate()+7),
+      startDate: getDateDaysAgo(20), // Últimos 20 dias (padrão)
+      endDate: getTodayDate(),
       routeName: "",
       search: "",
     };
+    
+    console.log("[FilterModal] Limpando filtros:", resetFilters);
+    console.log(`[FilterModal] Período resetado: ${resetFilters.startDate} até ${resetFilters.endDate}`);
+    
     setLocal(resetFilters);
     onApply(resetFilters);
     onClose();

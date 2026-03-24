@@ -21,7 +21,7 @@ import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
 const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
-const DEFAULT_EMAIL = "suporte@econtrole.com";
+const DEFAULT_EMAIL = "motoristaapp@econtrole.com";
 const DEFAULT_PASSWORD = "ecomotoapp";
 const CREDENTIALS_KEY = "econtrole_credentials";
 
@@ -301,7 +301,7 @@ export default function LoginScreen() {
                 <View style={styles.urlHints}>
                   <Text style={styles.urlHintTitle}>URLs comuns:</Text>
                   {[
-                    "https://testeaplicativo.econtrole.com/login",
+                    "https://testeaplicativo.econtrole.com/",
                     "https://app.econtrole.com",
                     "https://api.econtrole.com",
                     "https://econtrole.com.br",
