@@ -23,6 +23,19 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
 
+  // Log do erro quando o ErrorFallback é renderizado
+  React.useEffect(() => {
+    console.error("[ErrorFallback] ❌ Erro exibido no ErrorFallback:");
+    console.error("[ErrorFallback] Mensagem:", error.message);
+    console.error("[ErrorFallback] Stack:", error.stack);
+    
+    // Verifica se é erro de sessão expirada
+    if (error.message.includes("SESSION_EXPIRED")) {
+      console.warn("[ErrorFallback] 🔐 Erro de sessão expirada!");
+      console.warn("[ErrorFallback] 💡 O app deve tentar refresh automático antes de mostrar esta tela.");
+    }
+  }, [error]);
+
   const theme = {
     background: isDark ? "#000000" : "#FFFFFF",
     backgroundSecondary: isDark ? "#1C1C1E" : "#F2F2F7",

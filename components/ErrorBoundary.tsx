@@ -30,6 +30,17 @@ export class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }): void {
+    // Log todos os erros capturados
+    console.error("[ErrorBoundary] ❌ Erro capturado:", error.message);
+    console.error("[ErrorBoundary] Stack:", error.stack);
+    console.error("[ErrorBoundary] Component Stack:", info.componentStack);
+    
+    // Log específico para SESSION_EXPIRED
+    if (error.message.includes("SESSION_EXPIRED") || error.message.includes("expired")) {
+      console.error("[ErrorBoundary] 🔐 Erro de sessão expirada detectado!");
+      console.error("[ErrorBoundary] 💡 Isso é normal se o token expirou. O app vai fazer refresh automático.");
+    }
+    
     if (typeof this.props.onError === "function") {
       this.props.onError(error, info.componentStack);
     }

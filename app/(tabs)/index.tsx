@@ -39,7 +39,11 @@ export default function OrdersScreen() {
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ["service_orders", filters, baseUrl],
     queryFn: async () => {
-      if (!credentials) throw new Error("Nao autenticado");
+      if (!credentials) {
+        console.log("[IndexScreen] ❌ Sem credenciais - não busca OS");
+        throw new Error("Nao autenticado");
+      }
+      console.log("[IndexScreen] 🔑 Buscando OS com credenciais válidas...");
       try {
         // Prepara filtros no formato esperado pelo serviço
         const filterParams = {

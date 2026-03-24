@@ -204,14 +204,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("[AuthContext] Corrupted credentials in AsyncStorage - trying SQLite", e);
           }
         }
-        
+
         // Fallback: Tenta buscar do SQLite
         if (!credentials) {
           try {
             const { getCredentials } = require("@/databases/database");
             const sqliteCreds = getCredentials();
             console.log("[AuthContext] SQLite credentials:", sqliteCreds);
-            
+
             if (sqliteCreds && sqliteCreds.accessToken) {
               const credsFromSQLite: Credentials = {
                 accessToken: sqliteCreds.accessToken,
@@ -219,7 +219,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 uid: sqliteCreds.uid || '',
                 email: undefined,
               };
-              console.log("[AuthContext] Valid credentials found in SQLite");
+              console.log("[AuthContext] ✅ Credenciais carregadas do SQLite");
+              console.log("[AuthContext] 🕐 Token criado em:", sqliteCreds.created_at || "N/A");
               setCredentials(credsFromSQLite);
             }
           } catch (e) {
