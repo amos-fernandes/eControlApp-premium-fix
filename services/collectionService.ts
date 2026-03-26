@@ -15,6 +15,7 @@ export interface CollectionData {
   certificate_memo?: string;
   driver_observations?: string;
   service_executions?: any[];
+  service_executions_attributes?: any[];
   collected_equipment?: any[];
   lended_equipment?: any[];
   photos?: string[];
@@ -90,11 +91,13 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     start_km: data.start_km,
     end_km: data.end_km,
     certificate_memo: data.certificate_memo,
-    // Mantém service_executions_attributes (padrão Rails)
-    service_executions_attributes: data.service_executions?.map(exec => ({
-      ...exec,
+    // Mantém service_executions_attributes (padrão Rails) - ENVIA DADOS COMPLETOS
+    service_executions_attributes: data.service_executions_attributes?.map(exec => ({
+      id: exec.id,
+      service_id: exec.service_id,
+      amount: exec.amount,
       status: "checking" // Status de cada item
-    }))
+    })) || []
   };
 
   try {
