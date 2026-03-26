@@ -311,34 +311,6 @@ export default function OrderDetailScreen() {
           </Section>
         ) : null}
 
-        <Section title="FOTOS">
-          {order.photos && order.photos.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosScroll}>
-              {order.photos.map((uri, i) => (
-                <Image key={i} source={{ uri }} style={styles.photo} contentFit="cover" />
-              ))}
-              <Pressable style={[styles.addPhotoBtn, { borderColor: theme.border }]} onPress={handlePhotoOptions}>
-                <Feather name="plus" size={24} color={theme.textMuted} />
-              </Pressable>
-            </ScrollView>
-          ) : (
-            <View style={styles.noPhotos}>
-              <Pressable
-                style={[styles.addPhotoLarge, { borderColor: theme.border, backgroundColor: theme.surfaceSecondary }]}
-                onPress={handlePhotoOptions}
-              >
-                {uploadingPhoto ? (
-                  <ActivityIndicator color={Colors.primary} />
-                ) : (
-                  <>
-                    <Feather name="camera" size={28} color={theme.textMuted} />
-                    <Text style={[styles.addPhotoText, { color: theme.textMuted }]}>Adicionar foto</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          )}
-        </Section>
 
         {order.mtr_id ? (
           <View style={[styles.mtrSuccess, { backgroundColor: "#DCFCE7", borderColor: "#86EFAC" }]}>
