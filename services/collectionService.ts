@@ -92,11 +92,11 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     end_km: data.end_km,
     certificate_memo: data.certificate_memo,
     // Mantém service_executions_attributes (padrão Rails) - ENVIA DADOS COMPLETOS
+    // Sem campo 'status' que não existe no backend
     service_executions_attributes: data.service_executions_attributes?.map(exec => ({
       id: exec.id,
       service_id: exec.service_id,
-      amount: exec.amount,
-      status: "checking" // Status de cada item
+      amount: exec.amount
     })) || []
   };
 

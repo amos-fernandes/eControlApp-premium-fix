@@ -304,15 +304,14 @@ export default function UpdateOrderScreen() {
         console.log("[UpdateOrder] ✅ Credenciais renovadas com sucesso");
       }
 
-      // Prepara os service_executions com status 'checking'
+      // Prepara os service_executions
       // O endpoint /finish é responsável por mudar o status da OS para "Em Conferência"
       const serviceExecutions = serviceWeights.map(sw => {
         const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
         return {
           id: exec?.id || 0,
           service_id: sw.serviceId,
-          amount: parseFloat(sw.weight.replace(",", ".")) || 0,
-          status: "checking" // CRUCIAL para mudar status dos itens para "Em Conferência"
+          amount: parseFloat(sw.weight.replace(",", ".")) || 0
         };
       });
 
