@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
+const DEFAULT_BASE_URL = "https://testeaplicativo.econtrole.com";
 const DEFAULT_EMAIL = "motoristaapp@econtrole.com";
 const DEFAULT_PASSWORD = "ecomotoapp";
 const CREDENTIALS_KEY = "econtrole_credentials";
@@ -113,7 +114,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, "#142B1E", "#1B5E35"]}
+      colors={[Colors.primaryDark, "#89c2a1", "#467457"]}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <KeyboardAvoidingView
@@ -127,7 +128,11 @@ export default function LoginScreen() {
         >
           <View style={styles.logoArea}>
             <View style={styles.logoContainer}>
-              <MaterialCommunityIcons name="recycle" size={40} color="#73b275" />
+              <Image 
+                source={require('@/assets/images/icon.png')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.appName}>eControle</Text>
             <Text style={styles.appSubtitle}>Gestão de Ordens de Serviço</Text>
@@ -355,8 +360,8 @@ const styles = StyleSheet.create({
   },
   logoArea: { alignItems: "center", marginBottom: 32 },
   logoContainer: {
-    width: 80,
-    height: 80,
+    width: 100,
+    height: 100,
     borderRadius: 24,
     backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
@@ -364,6 +369,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
+    overflow: "hidden",
+  },
+  logoImage: {
+    width: 60,
+    height: 60,
   },
   appName: {
     fontSize: 32,
