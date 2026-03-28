@@ -133,7 +133,7 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
   };
 
   const handleReset = () => {
-    // Reset para filtro padrão de 7 dias antes e 7 dias depois (igual ao FilterContext)
+    // Reset para filtro padrão de 30 dias antes e 7 dias depois (igual ao FilterContext)
     const getDateDaysFromNow = (days: number): string => {
       const date = new Date();
       date.setDate(date.getDate() + days);
@@ -144,7 +144,7 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysFromNow(-7), // 7 dias antes
+      startDate: getDateDaysFromNow(-30), // 30 dias antes
       endDate: getDateDaysFromNow(7),    // 7 dias depois
       routeName: "",
       search: "",

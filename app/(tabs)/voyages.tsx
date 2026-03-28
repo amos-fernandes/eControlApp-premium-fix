@@ -42,17 +42,17 @@ export default function VoyagesScreen() {
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
 
-      // Filtro padrão de 7 dias antes e 7 dias depois (igual à tela principal)
+      // Filtro padrão de 30 dias antes e 7 dias depois (igual à tela principal)
       const now = new Date();
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const sevenDaysAfter = new Date(now);
       sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
 
-      const startDate = sevenDaysAgo.toISOString().split('T')[0];
+      const startDate = thirtyDaysAgo.toISOString().split('T')[0];
       const endDate = sevenDaysAfter.toISOString().split('T')[0];
 
-      // Busca OS com filtro de 7 dias antes + 7 dias depois com cache SQLite
+      // Busca OS com filtro de 30 dias antes + 7 dias depois com cache SQLite
       return getServicesOrders({
         filters: {
           status: "",
