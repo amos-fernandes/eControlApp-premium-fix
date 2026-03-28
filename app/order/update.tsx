@@ -159,7 +159,9 @@ export default function UpdateOrderScreen() {
 
         if (!draft) {
           // Inicializa horários da OS se existirem
-          console.log("[UpdateOrder] Carregando dados da OS:", {
+          console.log("\n========== [UpdateOrder] INICIALIZANDO DADOS DA OS ==========");
+          console.log("[UpdateOrder] OS data:", {
+            id: order.id,
             has_arrival_date: !!order.arrival_date,
             has_departure_date: !!order.departure_date,
             has_start_km: !!order.start_km,
@@ -171,17 +173,39 @@ export default function UpdateOrderScreen() {
           });
 
           if (order.arrival_date) {
-            const arrival = new Date(order.arrival_date);
-            setArrivalDate(arrival);
-            setArrivalTime(arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-            console.log("[UpdateOrder] Horário de chegada carregado:", arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+            try {
+              const arrival = new Date(order.arrival_date);
+              const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+              console.log("[UpdateOrder] ✅ Horário de chegada convertido:", {
+                original: order.arrival_date,
+                parsed: arrival.toISOString(),
+                timeStr: timeStr
+              });
+              setArrivalDate(arrival);
+              setArrivalTime(timeStr);
+            } catch (err) {
+              console.error("[UpdateOrder] ❌ Erro ao converter arrival_date:", err);
+            }
+          } else {
+            console.log("[UpdateOrder] ⚠️  order.arrival_date é NULO ou UNDEFINED");
           }
 
           if (order.departure_date) {
-            const departure = new Date(order.departure_date);
-            setDepartureDate(departure);
-            setDepartureTime(departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-            console.log("[UpdateOrder] Horário de saída carregado:", departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+            try {
+              const departure = new Date(order.departure_date);
+              const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+              console.log("[UpdateOrder] ✅ Horário de saída convertido:", {
+                original: order.departure_date,
+                parsed: departure.toISOString(),
+                timeStr: timeStr
+              });
+              setDepartureDate(departure);
+              setDepartureTime(timeStr);
+            } catch (err) {
+              console.error("[UpdateOrder] ❌ Erro ao converter departure_date:", err);
+            }
+          } else {
+            console.log("[UpdateOrder] ⚠️  order.departure_date é NULO ou UNDEFINED");
           }
 
           setStartKm(order.start_km || "");
@@ -195,6 +219,7 @@ export default function UpdateOrderScreen() {
             startKm: order.start_km,
             endKm: order.end_km
           });
+          console.log("===============================================================\n");
         }
       });
     }
@@ -236,26 +261,50 @@ export default function UpdateOrderScreen() {
   };
 
   const handleArrivalTimePress = () => {
+    console.log("[UpdateOrder] handleArrivalTimePress: Abrindo DateTimePicker");
     setShowArrivalPicker(true);
   };
 
   const handleDepartureTimePress = () => {
+    console.log("[UpdateOrder] handleDepartureTimePress: Abrindo DateTimePicker");
     setShowDeparturePicker(true);
   };
 
   const onArrivalTimeChange = (event: any, selectedDate?: Date) => {
-    setShowArrivalPicker(Platform.OS === "ios");
+    console.log("[UpdateOrder] onArrivalTimeChange:", {
+      event_type: event.type,
+      has_selectedDate: !!selectedDate,
+      selectedDate: selectedDate?.toISOString()
+    });
+    
+    if (Platform.OS === "android") {
+      setShowArrivalPicker(false);
+    }
+    
     if (selectedDate) {
+      const timeStr = selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      console.log("[UpdateOrder] Horário de chegada selecionado:", timeStr);
       setArrivalDate(selectedDate);
-      setArrivalTime(selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+      setArrivalTime(timeStr);
     }
   };
 
   const onDepartureTimeChange = (event: any, selectedDate?: Date) => {
-    setShowDeparturePicker(Platform.OS === "ios");
+    console.log("[UpdateOrder] onDepartureTimeChange:", {
+      event_type: event.type,
+      has_selectedDate: !!selectedDate,
+      selectedDate: selectedDate?.toISOString()
+    });
+    
+    if (Platform.OS === "android") {
+      setShowDeparturePicker(false);
+    }
+    
     if (selectedDate) {
+      const timeStr = selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      console.log("[UpdateOrder] Horário de saída selecionado:", timeStr);
       setDepartureDate(selectedDate);
-      setDepartureTime(selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+      setDepartureTime(timeStr);
     }
   };
 
@@ -293,6 +342,17 @@ export default function UpdateOrderScreen() {
 
   const handleSubmit = async () => {
     if (!order) return;
+
+    // LOG COMPLETO DO ESTADO ATUAL
+    console.log("\n========== [UpdateOrder] handleSubmit INICIADO ==========");
+    console.log("[UpdateOrder] Estado atual dos campos:");
+    console.log(`  - arrivalTime: "${arrivalTime}"`);
+    console.log(`  - departureTime: "${departureTime}"`);
+    console.log(`  - arrivalDate: ${arrivalDate?.toISOString() || "null"}`);
+    console.log(`  - departureDate: ${departureDate?.toISOString() || "null"}`);
+    console.log(`  - startKm: "${startKm}"`);
+    console.log(`  - endKm: "${endKm}"`);
+    console.log("===============================================================\n");
 
     // VALIDAÇÕES OBRIGATÓRIAS
     const filledWeights = serviceWeights.filter(sw => sw.weight && sw.weight.trim() !== "");
