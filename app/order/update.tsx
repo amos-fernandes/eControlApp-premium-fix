@@ -575,15 +575,64 @@ export default function UpdateOrderScreen() {
         )}
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionHeader}><Feather name="clock" size={18} color={theme.textSecondary} /><Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Horários e KM</Text></View>
+          <View style={styles.sectionHeader}>
+            <Feather name="clock" size={18} color={theme.textSecondary} />
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Horários e KM</Text>
+          </View>
+          
+          <View style={styles.timeRow}>
+            <View style={styles.timeLabel}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>Chegada</Text></View>
+            <View style={styles.timeLabel}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>Saída</Text></View>
+          </View>
+          
           <View style={styles.row}>
-            <Pressable onPress={handleArrivalTimePress} style={[styles.timeInput, { flex: 1, backgroundColor: theme.surfaceSecondary, borderColor: theme.border, borderRadius: 10, padding: 10 }]}>
-              <Text style={{ fontSize: 14, color: arrivalTime ? theme.text : theme.textMuted }}>{arrivalTime || "Chegada"}</Text>
+            <Pressable 
+              onPress={handleArrivalTimePress} 
+              style={({ pressed }) => [
+                styles.timeInput, 
+                { 
+                  flex: 1, 
+                  backgroundColor: theme.surfaceSecondary, 
+                  borderColor: theme.border, 
+                  borderRadius: 10, 
+                  padding: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  opacity: pressed ? 0.7 : 1
+                }
+              ]}
+            >
+              <Text style={{ fontSize: 16, color: arrivalTime ? theme.text : theme.textMuted, fontWeight: "500" }}>
+                {arrivalTime || "Selecionar"}
+              </Text>
+              <Feather name="clock" size={18} color={theme.textMuted} />
             </Pressable>
-            <Pressable onPress={handleDepartureTimePress} style={[styles.timeInput, { flex: 1, backgroundColor: theme.surfaceSecondary, borderColor: theme.border, borderRadius: 10, padding: 10 }]}>
-              <Text style={{ fontSize: 14, color: departureTime ? theme.text : theme.textMuted }}>{departureTime || "Saída"}</Text>
+            
+            <Pressable 
+              onPress={handleDepartureTimePress} 
+              style={({ pressed }) => [
+                styles.timeInput, 
+                { 
+                  flex: 1, 
+                  backgroundColor: theme.surfaceSecondary, 
+                  borderColor: theme.border, 
+                  borderRadius: 10, 
+                  padding: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  opacity: pressed ? 0.7 : 1
+                }
+              ]}
+            >
+              <Text style={{ fontSize: 16, color: departureTime ? theme.text : theme.textMuted, fontWeight: "500" }}>
+                {departureTime || "Selecionar"}
+              </Text>
+              <Feather name="clock" size={18} color={theme.textMuted} />
             </Pressable>
           </View>
+          
           <View style={styles.row}>
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Inicial" value={startKm} onChangeText={setStartKm} keyboardType="numeric" />
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Final" value={endKm} onChangeText={setEndKm} keyboardType="numeric" />
@@ -692,7 +741,10 @@ const styles = StyleSheet.create({
   serviceRow: { flexDirection: "row", alignItems: "center", padding: 12, borderBottomWidth: 1 },
   serviceName: { fontSize: 14 },
   input: { fontSize: 14, borderWidth: 1, borderRadius: 10, padding: 10, marginHorizontal: 12, marginBottom: 12 },
-  row: { flexDirection: "row", gap: 0 },
+  row: { flexDirection: "row", gap: 10 },
+  timeRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, marginBottom: 6 },
+  timeLabel: { flex: 1 },
+  timeLabelText: { fontSize: 12, fontWeight: "600", textTransform: "uppercase" },
   timeInput: { justifyContent: "center" },
   photoActions: { flexDirection: "row", gap: 12, padding: 12 },
   photoActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
