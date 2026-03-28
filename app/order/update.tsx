@@ -434,14 +434,35 @@ export default function UpdateOrderScreen() {
 
       // Prepara os service_executions
       // O endpoint /finish é responsável por mudar o status da OS para "Em Conferência"
+      console.log("\n========== [UpdateOrder] PREPARANDO SERVICE EXECUTIONS ==========");
+      console.log("[UpdateOrder] serviceWeights (estado):", JSON.stringify(serviceWeights, null, 2));
+      
       const serviceExecutions = serviceWeights.map(sw => {
         const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
+        
+        // Parse do peso com tratamento de erro
+        const weightStr = sw.weight.replace(",", ".");
+        const parsedAmount = parseFloat(weightStr);
+        const finalAmount = parsedAmount || 0;
+        
+        console.log(`[UpdateOrder] Service: ${sw.serviceName}`);
+        console.log(`  - serviceId: ${sw.serviceId}`);
+        console.log(`  - weight (original): "${sw.weight}"`);
+        console.log(`  - weight (formatado): "${weightStr}"`);
+        console.log(`  - parsedAmount: ${parsedAmount}`);
+        console.log(`  - finalAmount: ${finalAmount}`);
+        console.log(`  - exec.id: ${exec?.id}`);
+        console.log(`  - exec.service.id: ${exec?.service?.id}`);
+        
         return {
           id: exec?.id || 0,
           service_id: sw.serviceId,
-          amount: parseFloat(sw.weight.replace(",", ".")) || 0
+          amount: finalAmount
         };
       });
+      
+      console.log("[UpdateOrder] serviceExecutions (pronto para envio):", JSON.stringify(serviceExecutions, null, 2));
+      console.log("===============================================================\n");
 
       // Prepara dados completos para envio
       const updates = {

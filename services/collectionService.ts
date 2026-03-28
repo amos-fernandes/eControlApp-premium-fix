@@ -93,12 +93,38 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     certificate_memo: data.certificate_memo,
     // Mantém service_executions_attributes (padrão Rails) - ENVIA DADOS COMPLETOS
     // Sem campo 'status' que não existe no backend
-    service_executions_attributes: data.service_executions_attributes?.map(exec => ({
-      id: exec.id,
-      service_id: exec.service_id,
-      amount: exec.amount
-    })) || []
-  };
+    console.log("\n========== [CollectionService] MAPEANDO SERVICE EXECUTIONS ==========");
+    console.log("[CollectionService] data.service_executions_attributes (entrada):", JSON.stringify(data.service_executions_attributes, null, 2));
+    
+    const mappedExecutions = data.service_executions_attributes?.map(exec => {
+      const mapped = {
+        id: exec.id,
+        service_id: exec.service_id,
+        amount: exec.amount
+      };
+      console.log(`[CollectionService] Mapeando execution:`);
+      console.log(`  - id: ${exec.id} → ${mapped.id}`);
+      console.log(`  - service_id: ${exec.service_id} → ${mapped.service_id}`);
+      console.log(`  - amount: ${exec.amount} → ${mapped.amount} (typeof: ${typeof exec.amount})`);
+      return mapped;
+    }) || [];
+    
+    console.log("[CollectionService] service_executions_attributes (mapeado):", JSON.stringify(mappedExecutions, null, 2));
+    console.log("===============================================================\n");
+    
+    const payload = {
+      checking: true, // ✅ BOOLEANO - Campo principal que a API espera
+      collected_equipment: data.collected_equipment || [],
+      lended_equipment: data.lended_equipment || [],
+      driver_observations: data.driver_observations || "",
+      arrival_date: data.arrival_date,
+      departure_date: data.departure_date,
+      start_km: data.start_km,
+      end_km: data.end_km,
+      certificate_memo: data.certificate_memo,
+      // Mantém service_executions_attributes (padrão Rails) - ENVIA DADOS COMPLETOS
+      service_executions_attributes: mappedExecutions
+    };
 
   try {
     console.log("\n========== [CollectionService] ENVIANDO PARA API ==========");
@@ -142,6 +168,15 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     console.log(`  - departure_date: ${response.data?.departure_date}`);
     console.log(`  - start_km: ${response.data?.start_km}`);
     console.log(`  - end_km: ${response.data?.end_km}`);
+    
+    // Verifica service_executions retornados
+    if (response.data?.service_executions) {
+      console.log(`[CollectionService] 📊 service_executions retornados pela API:`);
+      response.data.service_executions.forEach((exec: any, i: number) => {
+        console.log(`  [${i}] id=${exec.id}, service_id=${exec.service_id}, amount=${exec.amount}`);
+      });
+    }
+    
     console.log("===============================================================\n");
     
     // Verifica se o status foi alterado corretamente
