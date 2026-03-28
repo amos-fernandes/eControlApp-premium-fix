@@ -26,7 +26,6 @@ const STATUS_OPTIONS = [
   { label: "Todos", value: "acting"   },
   { label: "Pendente", value: "scheduled" },
   { label: "Em Conferência", value: "running" },
-  { label: "Iniciada", value: "started" },
   { label: "Concluída", value: "finished" },
   { label: "Cancelada", value: "canceled" },
 ];
