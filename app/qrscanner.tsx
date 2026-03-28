@@ -36,7 +36,7 @@ function atobPolyfill(str: string): string {
   }
 }
 
-const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
+const DEFAULT_BASE_URL = "https://testaplicativo.econtrole.com/api";
 
 // ─── What the QR code can contain ─────────────────────────────────────────────
 type QRResult =

@@ -35,7 +35,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const CREDENTIALS_KEY = "econtrole_credentials";
 const BASE_URL_KEY = "econtrole_base_url";
-const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
+const DEFAULT_BASE_URL = "https://testeaplicativo.econtrole.com";
 
 // Devise Token Auth endpoint variations to try
 const AUTH_PATHS = [

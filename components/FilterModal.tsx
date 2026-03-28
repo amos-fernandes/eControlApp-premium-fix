@@ -25,6 +25,7 @@ interface FilterModalProps {
 const STATUS_OPTIONS = [
   { label: "Todos", value: "acting"   },
   { label: "Pendente", value: "scheduled" },
+  { label: "Iniciada", value: "started" },
   { label: "Em Conferência", value: "running" },
   { label: "Concluída", value: "finished" },
   { label: "Cancelada", value: "canceled" },
