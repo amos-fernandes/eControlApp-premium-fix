@@ -44,7 +44,6 @@ export default function OrdersScreen() {
         throw new Error("Nao autenticado");
       }
       console.log("[IndexScreen] 🔑 Buscando OS com credenciais válidas...");
-      console.log("[IndexScreen] Filtros aplicados:", filters);
       try {
         // Prepara filtros no formato esperado pelo serviço
         const filterParams = {
@@ -57,7 +56,6 @@ export default function OrdersScreen() {
           },
         };
 
-        console.log("[IndexScreen] filterParams:", JSON.stringify(filterParams, null, 2));
         const orders = await getServicesOrders(filterParams);
         setDebugInfo(null);
         return orders;
@@ -73,21 +71,8 @@ export default function OrdersScreen() {
     },
     enabled: !!credentials,
     retry: (failureCount, error) => {
-      console.log(`[IndexScreen] retry: failureCount=${failureCount}, error=${error.message}`);
-      
       // Não retry em caso de sessão expirada
-      if (error.message === "SESSION_EXPIRED") {
-        console.log("[IndexScreen] retry: SESSION_EXPIRED - não faz retry, deixa o handleError resolver");
-        return false;
-      }
-      
-      // Não retry se o filtro for inválido (status que não existe)
-      if (filters.status && filters.status !== "acting" && filters.status !== "running" && filters.status !== "checking" && filters.status !== "finished" && filters.status !== "scheduled" && filters.status !== "canceled") {
-        console.log(`[IndexScreen] retry: Status "${filters.status}" inválido - não faz retry`);
-        return false;
-      }
-      
-      // Máximo 2 tentativas para outros erros
+      if (error.message === "SESSION_EXPIRED") return false;
       return failureCount < 2;
     },
   });
