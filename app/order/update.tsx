@@ -157,8 +157,53 @@ export default function UpdateOrderScreen() {
           );
         }
 
+        // Carrega horários do rascunho ou da OS
+        if (draft?.arrival_date) {
+          const arrival = new Date(draft.arrival_date);
+          const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de chegada do RASCUNHO:", {
+            original: draft.arrival_date,
+            parsed: arrival.toISOString(),
+            timeStr: timeStr
+          });
+          setArrivalDate(arrival);
+          setArrivalTime(timeStr);
+        } else if (order.arrival_date) {
+          const arrival = new Date(order.arrival_date);
+          const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de chegada da OS:", {
+            original: order.arrival_date,
+            parsed: arrival.toISOString(),
+            timeStr: timeStr
+          });
+          setArrivalDate(arrival);
+          setArrivalTime(timeStr);
+        }
+
+        if (draft?.departure_date) {
+          const departure = new Date(draft.departure_date);
+          const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de saída do RASCUNHO:", {
+            original: draft.departure_date,
+            parsed: departure.toISOString(),
+            timeStr: timeStr
+          });
+          setDepartureDate(departure);
+          setDepartureTime(timeStr);
+        } else if (order.departure_date) {
+          const departure = new Date(order.departure_date);
+          const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de saída da OS:", {
+            original: order.departure_date,
+            parsed: departure.toISOString(),
+            timeStr: timeStr
+          });
+          setDepartureDate(departure);
+          setDepartureTime(timeStr);
+        }
+
         if (!draft) {
-          // Inicializa horários da OS se existirem
+          // Inicializa outros dados apenas se não houver rascunho
           console.log("\n========== [UpdateOrder] INICIALIZANDO DADOS DA OS ==========");
           console.log("[UpdateOrder] OS data:", {
             id: order.id,
@@ -171,42 +216,6 @@ export default function UpdateOrderScreen() {
             start_km: order.start_km,
             end_km: order.end_km
           });
-
-          if (order.arrival_date) {
-            try {
-              const arrival = new Date(order.arrival_date);
-              const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-              console.log("[UpdateOrder] ✅ Horário de chegada convertido:", {
-                original: order.arrival_date,
-                parsed: arrival.toISOString(),
-                timeStr: timeStr
-              });
-              setArrivalDate(arrival);
-              setArrivalTime(timeStr);
-            } catch (err) {
-              console.error("[UpdateOrder] ❌ Erro ao converter arrival_date:", err);
-            }
-          } else {
-            console.log("[UpdateOrder] ⚠️  order.arrival_date é NULO ou UNDEFINED");
-          }
-
-          if (order.departure_date) {
-            try {
-              const departure = new Date(order.departure_date);
-              const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-              console.log("[UpdateOrder] ✅ Horário de saída convertido:", {
-                original: order.departure_date,
-                parsed: departure.toISOString(),
-                timeStr: timeStr
-              });
-              setDepartureDate(departure);
-              setDepartureTime(timeStr);
-            } catch (err) {
-              console.error("[UpdateOrder] ❌ Erro ao converter departure_date:", err);
-            }
-          } else {
-            console.log("[UpdateOrder] ⚠️  order.departure_date é NULO ou UNDEFINED");
-          }
 
           setStartKm(order.start_km || "");
           setEndKm(order.end_km || "");
