@@ -436,8 +436,9 @@ export default function UpdateOrderScreen() {
 
       // Prepara dados completos para envio
       const updates = {
-        arrival_date: arrivalTime ? new Date().toISOString() : undefined,
-        departure_date: departureTime ? new Date().toISOString() : undefined,
+        // Usa arrivalDate/departureDate se existirem, senão cria data com a hora selecionada
+        arrival_date: arrivalDate ? arrivalDate.toISOString() : (arrivalTime ? new Date().toISOString() : undefined),
+        departure_date: departureDate ? departureDate.toISOString() : (departureTime ? new Date().toISOString() : undefined),
         start_km: startKm,
         end_km: endKm,
         certificate_memo: certificateMemo || undefined,
@@ -452,7 +453,11 @@ export default function UpdateOrderScreen() {
       console.log(`[UpdateOrder] OS ID: ${order.id}`);
       console.log(`[UpdateOrder] Dados sendo enviados:`);
       console.log(`  - arrival_date: ${updates.arrival_date || "NÃO ENVIADO"}`);
+      console.log(`    → arrivalDate: ${arrivalDate?.toISOString() || "null"}`);
+      console.log(`    → arrivalTime: "${arrivalTime || "vazio"}"`);
       console.log(`  - departure_date: ${updates.departure_date || "NÃO ENVIADO"}`);
+      console.log(`    → departureDate: ${departureDate?.toISOString() || "null"}`);
+      console.log(`    → departureTime: "${departureTime || "vazio"}"`);
       console.log(`  - start_km: ${updates.start_km || "NÃO ENVIADO"}`);
       console.log(`  - end_km: ${updates.end_km || "NÃO ENVIADO"}`);
       console.log(`  - certificate_memo: ${updates.certificate_memo || "NÃO ENVIADO"}`);
