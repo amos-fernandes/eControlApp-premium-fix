@@ -130,7 +130,15 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     // suporte@econtrole.com: Vê TODAS as OS
     const userEmail = credentials.uid?.toLowerCase() || "";
     const isMotorista = userEmail.includes("motoristaapp");
-    
+
+    // LOG: Status antes do filtro por ator
+    const statusBeforeFilter: Record<string, number> = {};
+    orders.forEach((o: any) => {
+      const s = o.status || 'unknown';
+      statusBeforeFilter[s] = (statusBeforeFilter[s] || 0) + 1;
+    });
+    console.log("getServicesOrders: Status ANTES do filtro por ator:", statusBeforeFilter);
+
     if (isMotorista && !filters.status) {
       console.log("getServicesOrders: Filtro por ATOR (motoristaapp) - excluindo finished/canceled/scheduled");
       orders = orders.filter((o) => {
