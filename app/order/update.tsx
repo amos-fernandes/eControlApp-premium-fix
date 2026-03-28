@@ -158,11 +158,43 @@ export default function UpdateOrderScreen() {
         }
 
         if (!draft) {
-          // NÃO inicializa horários automaticamente - usuário deve preencher
+          // Inicializa horários da OS se existirem
+          console.log("[UpdateOrder] Carregando dados da OS:", {
+            has_arrival_date: !!order.arrival_date,
+            has_departure_date: !!order.departure_date,
+            has_start_km: !!order.start_km,
+            has_end_km: !!order.end_km,
+            arrival_date: order.arrival_date,
+            departure_date: order.departure_date,
+            start_km: order.start_km,
+            end_km: order.end_km
+          });
+
+          if (order.arrival_date) {
+            const arrival = new Date(order.arrival_date);
+            setArrivalDate(arrival);
+            setArrivalTime(arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+            console.log("[UpdateOrder] Horário de chegada carregado:", arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          }
+
+          if (order.departure_date) {
+            const departure = new Date(order.departure_date);
+            setDepartureDate(departure);
+            setDepartureTime(departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+            console.log("[UpdateOrder] Horário de saída carregado:", departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          }
+
           setStartKm(order.start_km || "");
           setEndKm(order.end_km || "");
           setCertificateMemo(order.certificate_memo || "");
           setDriverObservations(order.driver_observations || "");
+
+          console.log("[UpdateOrder] Dados inicializados:", {
+            arrivalTime,
+            departureTime,
+            startKm: order.start_km,
+            endKm: order.end_km
+          });
         }
       });
     }
@@ -342,10 +374,7 @@ export default function UpdateOrderScreen() {
         };
       });
 
-      console.log(`[UpdateOrder] Preparando envio para OS ${order.id}:`);
-      console.log(`[UpdateOrder] Service Executions:`, JSON.stringify(serviceExecutions, null, 2));
-
-      // Payload para endpoint /finish (não precisa envelopar em 'service_order')
+      // Prepara dados completos para envio
       const updates = {
         arrival_date: arrivalTime ? new Date().toISOString() : undefined,
         departure_date: departureTime ? new Date().toISOString() : undefined,
@@ -359,7 +388,20 @@ export default function UpdateOrderScreen() {
         service_executions_attributes: serviceExecutions,
       };
 
-      console.log(`[UpdateOrder] Updates completos:`, JSON.stringify(updates, null, 2));
+      console.log("\n========== [UpdateOrder] ENVIANDO OS PARA CONFERÊNCIA ==========");
+      console.log(`[UpdateOrder] OS ID: ${order.id}`);
+      console.log(`[UpdateOrder] Dados sendo enviados:`);
+      console.log(`  - arrival_date: ${updates.arrival_date || "NÃO ENVIADO"}`);
+      console.log(`  - departure_date: ${updates.departure_date || "NÃO ENVIADO"}`);
+      console.log(`  - start_km: ${updates.start_km || "NÃO ENVIADO"}`);
+      console.log(`  - end_km: ${updates.end_km || "NÃO ENVIADO"}`);
+      console.log(`  - certificate_memo: ${updates.certificate_memo || "NÃO ENVIADO"}`);
+      console.log(`  - driver_observations: ${updates.driver_observations || "NÃO ENVIADO"}`);
+      console.log(`  - collected_equipment: ${JSON.stringify(updates.collected_equipment)}`);
+      console.log(`  - lended_equipment: ${JSON.stringify(updates.lended_equipment)}`);
+      console.log(`  - service_executions_attributes: ${JSON.stringify(updates.service_executions_attributes, null, 2)}`);
+      console.log(`[UpdateOrder] Payload completo:`, JSON.stringify(updates, null, 2));
+      console.log("===============================================================\n");
 
       await CollectionService.finishOrder(order.id, updates as any);
       await CollectionService.clearDraft(order.id); // Limpa rascunho após envio

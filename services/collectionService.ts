@@ -101,6 +101,7 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
   };
 
   try {
+    console.log("\n========== [CollectionService] ENVIANDO PARA API ==========");
     console.log(`[CollectionService] 📤 Enviando OS ${orderId} para Conferência em: ${url}`);
     console.log(`[CollectionService] 🔑 Headers:`, {
       "Content-Type": "application/json",
@@ -108,9 +109,19 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
       "client": credentials.client?.substring(0, 10) + "...",
       "uid": credentials.uid?.substring(0, 10) + "..."
     });
-    console.log(`[CollectionService] 📦 Payload COMPLETO (corrigido):`, JSON.stringify(payload, null, 2));
-    console.log(`[CollectionService] 📊 checking: ${payload.checking} (booleano)`);
-    
+    console.log(`[CollectionService] 📦 Payload COMPLETO:`);
+    console.log(`  - checking: ${payload.checking} (booleano)`);
+    console.log(`  - arrival_date: ${payload.arrival_date || "NÃO ENVIADO"}`);
+    console.log(`  - departure_date: ${payload.departure_date || "NÃO ENVIADO"}`);
+    console.log(`  - start_km: ${payload.start_km || "NÃO ENVIADO"}`);
+    console.log(`  - end_km: ${payload.end_km || "NÃO ENVIADO"}`);
+    console.log(`  - driver_observations: ${payload.driver_observations || "NÃO ENVIADO"}`);
+    console.log(`  - certificate_memo: ${payload.certificate_memo || "NÃO ENVIADO"}`);
+    console.log(`  - collected_equipment: ${JSON.stringify(payload.collected_equipment)}`);
+    console.log(`  - lended_equipment: ${JSON.stringify(payload.lended_equipment)}`);
+    console.log(`  - service_executions_attributes: ${JSON.stringify(payload.service_executions_attributes, null, 2)}`);
+    console.log("===============================================================\n");
+
     const response = await axios.post(url, payload, {
       headers,
       timeout: 25000,
@@ -119,11 +130,19 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
       // Garante que o axios não tente transformar o payload
       transformRequest: [(data) => JSON.stringify(data)]
     });
-    
+
+    console.log("\n========== [CollectionService] RESPOSTA DA API ==========");
     await clearDraft(orderId);
     console.log(`[CollectionService] ✅ OS ${orderId} enviada com sucesso!`);
     console.log(`[CollectionService] 📊 Status retornado pela API: "${response.data?.status}"`);
-    console.log(`[CollectionService] 📊 Status esperado: "checking" (Em Conferência)`);
+    console.log(`[CollectionService] 📊 Dados retornados:`);
+    console.log(`  - status: ${response.data?.status}`);
+    console.log(`  - checking: ${response.data?.checking}`);
+    console.log(`  - arrival_date: ${response.data?.arrival_date}`);
+    console.log(`  - departure_date: ${response.data?.departure_date}`);
+    console.log(`  - start_km: ${response.data?.start_km}`);
+    console.log(`  - end_km: ${response.data?.end_km}`);
+    console.log("===============================================================\n");
     
     // Verifica se o status foi alterado corretamente
     if (response.data?.status === 'checking') {
