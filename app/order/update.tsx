@@ -1,14 +1,13 @@
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { Linking, Image } from "react-native";
+import { Linking, Image, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
@@ -51,6 +51,10 @@ export default function UpdateOrderScreen() {
   const [lendedEquipment, setLendedEquipment] = useState<EquipmentItem[]>([]);
   const [arrivalTime, setArrivalTime] = useState("");
   const [departureTime, setDepartureTime] = useState("");
+  const [arrivalDate, setArrivalDate] = useState<Date | null>(null);
+  const [departureDate, setDepartureDate] = useState<Date | null>(null);
+  const [showArrivalPicker, setShowArrivalPicker] = useState(false);
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
   const [startKm, setStartKm] = useState("");
   const [endKm, setEndKm] = useState("");
   const [certificateMemo, setCertificateMemo] = useState("");
@@ -154,8 +158,7 @@ export default function UpdateOrderScreen() {
         }
 
         if (!draft) {
-          if (order.arrival_date) setArrivalTime(new Date(order.arrival_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-          if (order.departure_date) setDepartureTime(new Date(order.departure_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          // NÃO inicializa horários automaticamente - usuário deve preencher
           setStartKm(order.start_km || "");
           setEndKm(order.end_km || "");
           setCertificateMemo(order.certificate_memo || "");
@@ -198,6 +201,30 @@ export default function UpdateOrderScreen() {
 
   const removePhoto = (index: number) => {
     setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleArrivalTimePress = () => {
+    setShowArrivalPicker(true);
+  };
+
+  const handleDepartureTimePress = () => {
+    setShowDeparturePicker(true);
+  };
+
+  const onArrivalTimeChange = (event: any, selectedDate?: Date) => {
+    setShowArrivalPicker(Platform.OS === "ios");
+    if (selectedDate) {
+      setArrivalDate(selectedDate);
+      setArrivalTime(selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+    }
+  };
+
+  const onDepartureTimeChange = (event: any, selectedDate?: Date) => {
+    setShowDeparturePicker(Platform.OS === "ios");
+    if (selectedDate) {
+      setDepartureDate(selectedDate);
+      setDepartureTime(selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+    }
   };
 
   const handleOpenMap = () => {
@@ -448,14 +475,36 @@ export default function UpdateOrderScreen() {
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}><Feather name="clock" size={18} color={theme.textSecondary} /><Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Horários e KM</Text></View>
           <View style={styles.row}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Chegada" value={arrivalTime} onChangeText={setArrivalTime} />
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Saída" value={departureTime} onChangeText={setDepartureTime} />
+            <Pressable onPress={handleArrivalTimePress} style={[styles.timeInput, { flex: 1, backgroundColor: theme.surfaceSecondary, borderColor: theme.border, borderRadius: 10, padding: 10 }]}>
+              <Text style={{ fontSize: 14, color: arrivalTime ? theme.text : theme.textMuted }}>{arrivalTime || "Chegada"}</Text>
+            </Pressable>
+            <Pressable onPress={handleDepartureTimePress} style={[styles.timeInput, { flex: 1, backgroundColor: theme.surfaceSecondary, borderColor: theme.border, borderRadius: 10, padding: 10 }]}>
+              <Text style={{ fontSize: 14, color: departureTime ? theme.text : theme.textMuted }}>{departureTime || "Saída"}</Text>
+            </Pressable>
           </View>
           <View style={styles.row}>
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Inicial" value={startKm} onChangeText={setStartKm} keyboardType="numeric" />
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Final" value={endKm} onChangeText={setEndKm} keyboardType="numeric" />
           </View>
         </View>
+
+        {showArrivalPicker && (
+          <DateTimePicker
+            value={arrivalDate || new Date()}
+            mode="time"
+            display="default"
+            onChange={onArrivalTimeChange}
+          />
+        )}
+
+        {showDeparturePicker && (
+          <DateTimePicker
+            value={departureDate || new Date()}
+            mode="time"
+            display="default"
+            onChange={onDepartureTimeChange}
+          />
+        )}
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
@@ -542,6 +591,7 @@ const styles = StyleSheet.create({
   serviceName: { fontSize: 14 },
   input: { fontSize: 14, borderWidth: 1, borderRadius: 10, padding: 10, marginHorizontal: 12, marginBottom: 12 },
   row: { flexDirection: "row", gap: 0 },
+  timeInput: { justifyContent: "center" },
   photoActions: { flexDirection: "row", gap: 12, padding: 12 },
   photoActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
   photoActionText: { fontSize: 13, fontWeight: "600" },
