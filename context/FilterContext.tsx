@@ -28,12 +28,12 @@ function getTodayDate(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-// Configuração solicitada: 20 dias antes e 7 dias depois
+// Configuração solicitada: 7 dias antes e 7 dias depois
 const defaultFilters: ServiceOrderFilters = {
   status: "", // Vazio significa "Todos" (que será tratado como "acting": running + started)
   type: "",
   hasVoyage: "",
-  startDate: getDateDaysFromNow(-20),
+  startDate: getDateDaysFromNow(-7),
   endDate: getDateDaysFromNow(7),
   routeName: "",
   search: "",

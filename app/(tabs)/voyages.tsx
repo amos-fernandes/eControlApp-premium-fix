@@ -41,16 +41,18 @@ export default function VoyagesScreen() {
     queryKey: ["service_orders_voyages", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
-      
-      // Filtro padrão de 20 dias (igual à tela principal)
+
+      // Filtro padrão de 7 dias antes e 7 dias depois (igual à tela principal)
       const now = new Date();
-      const twentyDaysAgo = new Date(now);
-      twentyDaysAgo.setDate(twentyDaysAgo.getDate() - 20);
-      
-      const startDate = twentyDaysAgo.toISOString().split('T')[0];
-      const endDate = now.toISOString().split('T')[0];
-      
-      // Busca OS dos últimos 20 dias com cache SQLite
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const sevenDaysAfter = new Date(now);
+      sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
+
+      const startDate = sevenDaysAgo.toISOString().split('T')[0];
+      const endDate = sevenDaysAfter.toISOString().split('T')[0];
+
+      // Busca OS com filtro de 7 dias antes + 7 dias depois com cache SQLite
       return getServicesOrders({
         filters: {
           status: "",
