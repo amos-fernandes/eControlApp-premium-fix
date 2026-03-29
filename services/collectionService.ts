@@ -108,18 +108,30 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
       "client": credentials.client?.substring(0, 10) + "...",
       "uid": credentials.uid?.substring(0, 10) + "..."
     });
-    console.log(`[CollectionService] 📦 Payload COMPLETO:`);
-    console.log(`  - checking: ${payload.checking} (booleano)`);
-    console.log(`  - arrival_date: ${payload.arrival_date || "NÃO ENVIADO"}`);
-    console.log(`  - departure_date: ${payload.departure_date || "NÃO ENVIADO"}`);
-    console.log(`  - start_km: ${payload.start_km || "NÃO ENVIADO"}`);
-    console.log(`  - end_km: ${payload.end_km || "NÃO ENVIADO"}`);
-    console.log(`  - driver_observations: ${payload.driver_observations || "NÃO ENVIADO"}`);
-    console.log(`  - certificate_memo: ${payload.certificate_memo || "NÃO ENVIADO"}`);
-    console.log(`  - collected_equipment: ${JSON.stringify(payload.collected_equipment)}`);
-    console.log(`  - lended_equipment: ${JSON.stringify(payload.lended_equipment)}`);
-    console.log(`  - service_executions_attributes: ${JSON.stringify(payload.service_executions_attributes, null, 2)}`);
+    
+    // LOG DETALHADO DO PAYLOAD JSON QUE SERÁ ENVIADO
+    const payloadJSON = JSON.stringify(payload, null, 2);
+    console.log("\n📦📦📦 [CollectionService] PAYLOAD JSON COMPLETO 📦📦📦");
+    console.log("===============================================================");
+    console.log(payloadJSON);
     console.log("===============================================================\n");
+    
+    // LOG ESPECÍFICO DOS AMOUNTS
+    console.log("\n💰💰💰 [CollectionService] VERIFICAÇÃO DE AMOUNTS 💰💰💰");
+    console.log("===============================================================");
+    payload.service_executions_attributes?.forEach((exec: any, i: number) => {
+      console.log(`[Item ${i + 1}]:`);
+      console.log(`  id: ${exec.id}`);
+      console.log(`  service_id: ${exec.service_id}`);
+      console.log(`  amount: ${exec.amount} ← VALOR QUE VAI NA REQUISIÇÃO HTTP!`);
+      console.log(`  amount type: ${typeof exec.amount}`);
+      console.log(`  amount isNaN: ${isNaN(exec.amount)}`);
+      console.log(`  amount === 0: ${exec.amount === 0}`);
+      console.log(`  amount === null: ${exec.amount === null}`);
+      console.log(`  amount === undefined: ${exec.amount === undefined}`);
+    });
+    console.log("===============================================================\n");
+    console.log("💰💰💰 FIM DA VERIFICAÇÃO DE AMOUNTS 💰💰💰\n");
 
     const response = await axios.post(url, payload, {
       headers,

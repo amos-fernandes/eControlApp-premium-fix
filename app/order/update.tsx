@@ -479,6 +479,30 @@ export default function UpdateOrderScreen() {
         service_executions_attributes: serviceExecutions,
       };
 
+      // LOG EXTREMAMENTE DETALHADO DO PAYLOAD
+      console.log("\n💰💰💰 [UPDATEORDER] PAYLOAD COMPLETO SENDO ENVIADO 💰💰💰");
+      console.log("===============================================================");
+      console.log(`OS ID: ${order.id}`);
+      console.log(`Status: checking`);
+      console.log(`Checking: true`);
+      console.log("\n--- service_executions_attributes ---");
+      updates.service_executions_attributes?.forEach((exec: any, i: number) => {
+        console.log(`\n[Item ${i + 1}]:`);
+        console.log(`  id: ${exec.id}`);
+        console.log(`  service_id: ${exec.service_id}`);
+        console.log(`  amount: ${exec.amount} ← ESTE É O VALOR QUE ESTÁ SENDO ENVIADO!`);
+        console.log(`  amount type: ${typeof exec.amount}`);
+        console.log(`  amount isNaN: ${isNaN(exec.amount)}`);
+      });
+      console.log("\n--- Outros dados ---");
+      console.log(`arrival_date: ${updates.arrival_date}`);
+      console.log(`departure_date: ${updates.departure_date}`);
+      console.log(`start_km: ${updates.start_km}`);
+      console.log(`end_km: ${updates.end_km}`);
+      console.log(`driver_observations: ${updates.driver_observations}`);
+      console.log("===============================================================\n");
+      console.log("💰💰💰 FIM DO PAYLOAD 💰💰💰\n");
+
       console.log("\n========== [UpdateOrder] ENVIANDO OS PARA CONFERÊNCIA ==========");
       console.log(`[UpdateOrder] OS ID: ${order.id}`);
       console.log(`[UpdateOrder] Dados sendo enviados:`);
