@@ -4,7 +4,7 @@ const TEST_CONFIG = {
   baseUrl: 'https://testeaplicativo.econtrole.com/api',
   email: 'motoristaapp@econtrole.com',
   password: 'ecomotoapp',
-  osId: 35103
+  osId: 35102
 };
 
 async function getOSDetails() {

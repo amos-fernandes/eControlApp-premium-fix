@@ -91,8 +91,8 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     start_km: data.start_km,
     end_km: data.end_km,
     certificate_memo: data.certificate_memo,
-    // Mantém service_executions_attributes (padrão Rails) - ENVIA DADOS COMPLETOS
-    service_executions_attributes: data.service_executions_attributes?.map(exec => ({
+    // ✅ CORREÇÃO: Backend Rails espera "service_executions" (não "service_executions_attributes")
+    service_executions: data.service_executions_attributes?.map(exec => ({
       id: exec.id,
       service_id: exec.service_id,
       amount: exec.amount
@@ -119,7 +119,7 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     // LOG ESPECÍFICO DOS AMOUNTS
     console.log("\n💰💰💰 [CollectionService] VERIFICAÇÃO DE AMOUNTS 💰💰💰");
     console.log("===============================================================");
-    payload.service_executions_attributes?.forEach((exec: any, i: number) => {
+    payload.service_executions?.forEach((exec: any, i: number) => {
       console.log(`[Item ${i + 1}]:`);
       console.log(`  id: ${exec.id}`);
       console.log(`  service_id: ${exec.service_id}`);
