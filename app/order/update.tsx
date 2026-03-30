@@ -475,8 +475,8 @@ export default function UpdateOrderScreen() {
         driver_observations: driverObservations || undefined,
         collected_equipment: collectedEquipment.filter(eq => eq.selected),
         lended_equipment: lendedEquipment.filter(eq => eq.selected),
-        // ✅ CORREÇÃO: Backend Rails espera "service_executions" (não "service_executions_attributes")
-        service_executions: serviceExecutions,
+        // ✅ Backend Rails espera "service_executions_attributes" para nested attributes
+        service_executions_attributes: serviceExecutions,
       };
 
       // LOG EXTREMAMENTE DETALHADO DO PAYLOAD
@@ -485,8 +485,8 @@ export default function UpdateOrderScreen() {
       console.log(`OS ID: ${order.id}`);
       console.log(`Status: checking`);
       console.log(`Checking: true`);
-      console.log("\n--- service_executions ---");
-      updates.service_executions?.forEach((exec: any, i: number) => {
+      console.log("\n--- service_executions_attributes ---");
+      updates.service_executions_attributes?.forEach((exec: any, i: number) => {
         console.log(`\n[Item ${i + 1}]:`);
         console.log(`  id: ${exec.id}`);
         console.log(`  service_id: ${exec.service_id}`);
@@ -518,8 +518,8 @@ export default function UpdateOrderScreen() {
       console.log(`  - driver_observations: ${updates.driver_observations || "NÃO ENVIADO"}`);
       console.log(`  - collected_equipment: ${JSON.stringify(updates.collected_equipment)}`);
       console.log(`  - lended_equipment: ${JSON.stringify(updates.lended_equipment)}`);
-      console.log(`  - service_executions: ${JSON.stringify(updates.service_executions, null, 2)}`);
-      console.log(`[UpdateOrder] Payload completo:`, JSON.stringify(updates, null, 2));
+      console.log(`  - service_executions_attributes: ${JSON.stringify(updates.service_executions_attributes, null, 2)}`);
+      console.log(`[UpdateOrder] Payload completo (service_order):`, JSON.stringify(updates, null, 2));
       console.log("===============================================================\n");
 
       await CollectionService.finishOrder(order.id, updates as any);

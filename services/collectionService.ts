@@ -81,22 +81,28 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
 
   // Payload corrigido baseado no projeto antigo (eControleApp)
   // Usando checking: true (booleano) ao invés de status: "checking" (string)
-  const payload = {
-    checking: true, // ✅ BOOLEANO - Campo principal que a API espera
-    collected_equipment: data.collected_equipment || [],
-    lended_equipment: data.lended_equipment || [],
-    driver_observations: data.driver_observations || "",
+  
+  // Backend Rails espera dados aninhados em "service_order"
+  const serviceOrderData = {
     arrival_date: data.arrival_date,
     departure_date: data.departure_date,
     start_km: data.start_km,
     end_km: data.end_km,
     certificate_memo: data.certificate_memo,
-    // ✅ CORREÇÃO: Backend Rails espera "service_executions" (não "service_executions_attributes")
-    service_executions: data.service_executions_attributes?.map(exec => ({
+    driver_observations: data.driver_observations || "",
+    collected_equipment: data.collected_equipment || [],
+    lended_equipment: data.lended_equipment || [],
+    // ✅ Backend Rails espera "service_executions_attributes" para nested attributes
+    service_executions_attributes: data.service_executions_attributes?.map(exec => ({
       id: exec.id,
       service_id: exec.service_id,
       amount: exec.amount
     })) || []
+  };
+  
+  const payload = {
+    checking: true, // ✅ BOOLEANO - Campo principal que a API espera
+    service_order: serviceOrderData  // ✅ Dados aninhados como Rails espera
   };
 
   try {
@@ -119,7 +125,7 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     // LOG ESPECÍFICO DOS AMOUNTS
     console.log("\n💰💰💰 [CollectionService] VERIFICAÇÃO DE AMOUNTS 💰💰💰");
     console.log("===============================================================");
-    payload.service_executions?.forEach((exec: any, i: number) => {
+    payload.service_order?.service_executions_attributes?.forEach((exec: any, i: number) => {
       console.log(`[Item ${i + 1}]:`);
       console.log(`  id: ${exec.id}`);
       console.log(`  service_id: ${exec.service_id}`);
