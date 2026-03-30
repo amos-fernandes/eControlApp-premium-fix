@@ -3,10 +3,60 @@
 ## 📋 Visão Geral
 **eControlApp** - Aplicativo React Native para gestão de ordens de serviço da eControle Pro.
 
-**Data**: 2026-03-24 (Última atualização)
+**Data**: 2026-03-29 (Última atualização)
 **Versão Atual**: 1.6.4
-**Status**: ✅ Funcional + Cache SQLite + Status Checking + Upload Fotos + Filtro por Ator
+**Status**: ✅ Funcional + Cache SQLite + Status Checking + Upload Fotos + Filtro por Ator + Amounts Corretos
 **Branch**: `developer`
+
+---
+
+## 🎯 NOVIDADES v1.6.4 (2026-03-29)
+
+### **CORREÇÃO CRÍTICA: Payload service_executions_attributes com dados aninhados** ✅💎
+- **Problema**: `amount` dos serviços estava sendo salvo como 0 (zero) no backend
+- **Sintoma**: OS era enviada para conferência, mas `service_executions.amount = 0`
+- **Investigação**:
+  - App enviava `amount: 3` e `amount: 3000` corretamente
+  - Logs mostravam payload correto no frontend
+  - Backend Rails recebia os dados mas salvava como 0
+- **Causa Raiz**: Backend Rails esperava dados aninhados em `service_order`, não no nível raiz
+- **Solução**:
+  - Payload agora envia dados aninhados em `service_order`
+  - `service_executions_attributes` dentro de `service_order` (nested attributes do Rails)
+  - Formato correto para `accepts_nested_attributes_for` do Rails
+- **Arquivos**: `services/collectionService.ts`, `app/order/update.tsx`
+- **Payload Corrigido**:
+```json
+{
+  "checking": true,
+  "service_order": {
+    "arrival_date": "2026-03-29T14:24:00.000Z",
+    "departure_date": "2026-03-29T15:24:00.000Z",
+    "start_km": "200",
+    "end_km": "230",
+    "driver_observations": "Teste",
+    "collected_equipment": [],
+    "lended_equipment": [],
+    "service_executions_attributes": [
+      {
+        "id": 76473,
+        "service_id": 23,
+        "amount": 3  ✅ VALOR CORRETO!
+      },
+      {
+        "id": 76472,
+        "service_id": 5,
+        "amount": 3000  ✅ VALOR CORRETO!
+      }
+    ]
+  }
+}
+```
+- **Logs de Debug Adicionados**:
+  - `💰💰💰 [UPDATEORDER] PAYLOAD COMPLETO SENDO ENVIADO 💰💰💰`
+  - `💰💰💰 [CollectionService] VERIFICAÇÃO DE AMOUNTS 💰💰💰`
+  - Logs mostram `amount type`, `isNaN`, `=== 0`, `=== null`, `=== undefined`
+- **Status**: ✅ **TESTADO E APROVADO** - OS 35102 com amounts 3 e 3000 salvos corretamente!
 
 ---
 
