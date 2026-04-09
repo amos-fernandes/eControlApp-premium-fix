@@ -330,6 +330,29 @@ export default function UpdateOrderScreen() {
 
   const handleEmitMTR = async () => {
     if (!order) return;
+
+    // 📋 LOG COMPLETO DOS DADOS DA OS
+    console.log("\n========== [MTR] DADOS COMPLETOS DA OS ==========");
+    console.log(JSON.stringify(order, null, 2));
+    console.log("=================================================\n");
+
+    // Monta mapa de pesos coletados (service_id -> amount)
+    const collectedWeights: Record<string, number> = {};
+    serviceWeights.forEach(sw => {
+      const exec = order.service_executions?.find(
+        (e: any) => String(e.service?.id) === String(sw.serviceId)
+      );
+      if (exec) {
+        const weight = parseFloat(sw.weight.replace(",", ".")) || 0;
+        const serviceId = exec.service?.id;
+        if (serviceId) {
+          collectedWeights[String(serviceId)] = weight;
+        }
+      }
+    });
+
+    console.log("[MTR] Pesos coletados:", JSON.stringify(collectedWeights, null, 2));
+
     Alert.alert("Emitir MTR", "Deseja emitir o MTR para esta OS?", [
       { text: "Cancelar", style: "cancel" },
       {
@@ -337,12 +360,12 @@ export default function UpdateOrderScreen() {
         onPress: async () => {
           setIsMtrLoading(true);
           try {
-            const result = await CollectionService.emitMTR(order.id, `OS-${order.id}`);
+            const result = await CollectionService.emitMTR(order, collectedWeights);
             setMtrResult(result);
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert("MTR Emitido", result.numero_mtr ? `Número: ${result.numero_mtr}` : "Sucesso!");
           } catch (err: any) {
-            Alert.alert("Erro", err.message || "Erro ao emitir MTR");
+            Alert.alert("Erro MTR", err.message || "Erro ao emitir MTR");
           } finally { setIsMtrLoading(false); }
         },
       },

@@ -4,7 +4,17 @@
       "Bash(git show *)",
       "Bash(npx *)",
       "Bash(npm ls *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(ls *)",
+      "Bash(which *)",
+      "Bash(dpkg *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(cat *)",
+      "Bash(java *)",
+      "Bash(/opt/android-studio/jbr/bin/java *)",
+      "Bash(chmod *)",
+      "Bash(./gradlew *)"
     ]
   },
   "$version": 3

@@ -114,7 +114,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, "#89c2a1", "#9bbea8"]}
+      colors={[Colors.primaryDark, "#eafbf1", "#e8fbef"]}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <KeyboardAvoidingView
