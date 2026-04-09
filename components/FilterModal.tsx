@@ -144,7 +144,7 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysFromNow(-30), // 30 dias antes
+      startDate: getDateDaysFromNow(-7), // 30 dias antes
       endDate: getDateDaysFromNow(7),    // 7 dias depois
       routeName: "",
       search: "",

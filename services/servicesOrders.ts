@@ -2,6 +2,7 @@ import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransact
 import { retrieveDomain } from "./retrieveUserSession";
 import type { ServiceOrder, ServiceExecution } from "./api";
 import type { Credentials } from "@/context/AuthContext";
+import { refreshAuthToken, getCurrentCredentials, clearTokenCache } from "@/lib/token-sync";
 
 export interface ApiConfig {
   baseUrl: string;
@@ -23,9 +24,12 @@ export interface FilterServiceOrderState {
  * - Primeiro tenta buscar do cache local
  * - Se tiver dados em cache, retorna imediatamente
  * - Se não tiver ou cache estiver vazio, busca da API e salva no cache
+ * - Faz refresh automático do token se receber 401
  */
 export const getServicesOrders = async ({ filters }: FilterServiceOrderState): Promise<ServiceOrder[]> => {
   console.log("getServicesOrders: Starting with filters:", filters);
+
+  let attemptRefresh = false;
 
   try {
     // Obtém credenciais e URL do banco/secure store
@@ -78,6 +82,7 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
 
     if (response.status === 401) {
       console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
+      attemptRefresh = true;
       throw new Error("SESSION_EXPIRED");
     }
 
@@ -158,7 +163,7 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     // ---------------------------------
 
     console.log(`getServicesOrders: Received ${orders.length} orders after filtering`);
-    
+
     // Log dos status recebidos para debug
     const statusCount: Record<string, number> = {};
     orders.forEach((o: any) => {

@@ -533,14 +533,34 @@ export default function UpdateOrderScreen() {
       ]);
     } catch (err: any) {
       console.error("[UpdateOrder] Erro ao enviar:", err);
-      
+
+      // Verifica se é o warning de network error (dados podem ter sido enviados)
+      if (err.warning === "NETWORK_ERROR_POSSIBLE_SUCCESS") {
+        console.warn("[UpdateOrder] ⚠️  Network error - dados PODEM ter sido enviados");
+        Alert.alert(
+          "Atenção",
+          "Os dados foram enviados mas o servidor não respondeu corretamente.\n\n" +
+          "A OS pode estar em conferência. Verifique na lista de OS antes de tentar novamente.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                queryClient.invalidateQueries({ queryKey: ["service_orders"] });
+                router.back();
+              }
+            }
+          ]
+        );
+        return; // Não mostra o segundo alert
+      }
+
       if (err.message === "SESSION_EXPIRED") {
         // Tenta refresh uma vez
         const refreshed = await refreshCredentials();
-        
+
         if (refreshed) {
           Alert.alert(
-            "Sessão Renovada", 
+            "Sessão Renovada",
             "Sua sessão expirou mas foi renovada. Tente enviar novamente.",
             [{ text: "OK" }]
           );
@@ -555,10 +575,10 @@ export default function UpdateOrderScreen() {
             "• O servidor de teste está instável\n\n" +
             "Você será redirecionado para o login.",
             [
-              { 
-                text: "OK", 
+              {
+                text: "OK",
                 onPress: () => {
-                  logout(); 
+                  logout();
                   router.replace("/(auth)/login");
                 }
               }

@@ -22,14 +22,16 @@ import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useFilters } from "@/context/FilterContext";
 import { getServicesOrders, getClientName, clearServiceOrdersCache } from "@/services/servicesOrders";
+import { refreshAuthToken } from "@/lib/token-sync";
 import type { ServiceOrder } from "@/services/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { credentials, baseUrl, logout, refreshCredentials } = useAuth();
   const { filters, setFilter, resetFilters, hasActiveFilters } = useFilters();
+  const queryClient = useQueryClient();
   const [showFilters, setShowFilters] = useState(false);
   const [localSearch, setLocalSearch] = useState("");
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
@@ -70,8 +72,12 @@ export default function OrdersScreen() {
       }
     },
     enabled: !!credentials,
+    // 💾 Mantém dados por 30 minutos antes de considerar "stale"
+    staleTime: 30 * 60 * 1000, // 30 minutos
+    // 🗑️ Garbage collection após 2 horas
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas
     retry: (failureCount, error) => {
-      // Não retry em caso de sessão expirada
+      // Não retry em caso de sessão expirada (faremos manual)
       if (error.message === "SESSION_EXPIRED") return false;
       return failureCount < 2;
     },
@@ -79,39 +85,33 @@ export default function OrdersScreen() {
 
   const handleError = useCallback(async () => {
     if (error instanceof Error && error.message === "SESSION_EXPIRED") {
-      console.log("[IndexScreen] SESSION_EXPIRED - Attempting refresh...");
-      console.log(`[IndexScreen] Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
+      console.log(`[IndexScreen] SESSION_EXPIRED - Attempting refresh (attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS})`);
 
       // Verifica se excedeu limite de tentativas
       if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-        console.error("[IndexScreen] ❌ Max refresh attempts reached - logging out");
-        await logout();
-        setRefreshAttempts(0); // Reset para próximo login
-        setTimeout(() => {
-          router.replace("/(auth)/login");
-        }, 100);
+        console.error("[IndexScreen] ❌ Max refresh attempts reached - stopping");
+        setRefreshAttempts(MAX_REFRESH_ATTEMPTS);
         return;
       }
 
-      // Tenta refresh automático
-      const refreshed = await refreshCredentials();
+      // Tenta refresh usando token-sync (single-flight)
+      const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/api";
+      const refreshed = await refreshAuthToken(baseUrlForRefresh);
 
       if (refreshed) {
-        console.log("[IndexScreen] Refresh successful - retrying request");
-        setRefreshAttempts(0); // Reset após sucesso
-        // Refresh bem-sucedido - tenta recarregar os dados
-        refetch();
-      } else {
-        console.log("[IndexScreen] Refresh failed - logging out");
-        // Refresh falhou - faz logout
-        await logout();
-        setRefreshAttempts(0); // Reset para próximo login
+        console.log("[IndexScreen] ✅ Token refreshed - retrying request");
+        setRefreshAttempts(prev => prev + 1);
+        // Invalidate query para forçar nova busca com novo token
         setTimeout(() => {
-          router.replace("/(auth)/login");
-        }, 100);
+          queryClient.invalidateQueries({ queryKey: ["service_orders"] });
+        }, 500);
+      } else {
+        console.log("[IndexScreen] ❌ Refresh failed - stopping retries");
+        setRefreshAttempts(MAX_REFRESH_ATTEMPTS);
+        // Não faz logout - mantém dados em cache visíveis
       }
     }
-  }, [error, logout, router, refreshCredentials, refetch, refreshAttempts]);
+  }, [error, logout, router, refreshCredentials, refetch, refreshAttempts, baseUrl, queryClient]);
 
   // Usar useEffect para chamar handleError depois do render
   useEffect(() => {

@@ -166,10 +166,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [baseUrl, setBaseUrlState] = useState(DEFAULT_BASE_URL);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Use ref to always access latest baseUrlState in callbacks without re-creating them
   const baseUrlRef = useRef(DEFAULT_BASE_URL);
   baseUrlRef.current = baseUrl;
+
+  // Forward ref para refreshCredentials (será definido depois)
+  const refreshCredentialsRef = useRef<() => Promise<boolean>>(
+    async () => false
+  );
+
+  // ⏰ Refresh automático periódico (a cada 45 minutos)
+  const scheduleAutoRefresh = useCallback(() => {
+    // Limpa timer anterior se existir
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    // Agenda próximo refresh (45 minutos = 2700000ms)
+    refreshTimerRef.current = setTimeout(async () => {
+      console.log("[AuthContext] ⏰ Auto-refresh triggered (45min interval)");
+      const success = await refreshCredentialsRef.current();
+      if (success) {
+        console.log("[AuthContext] ✅ Auto-refresh successful, scheduling next...");
+        scheduleAutoRefresh(); // Agenda próximo
+      } else {
+        console.warn("[AuthContext] ❌ Auto-refresh failed - user may need to relogin");
+      }
+    }, 45 * 60 * 1000); // 45 minutos
+
+    console.log("[AuthContext] ⏰ Auto-refresh scheduled for 45 minutes from now");
+  }, []);
+
+  // Limpa timer no unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        console.log("[AuthContext] 🧹 Auto-refresh timer cleared");
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -180,7 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
         console.log("[AuthContext] Loaded storedCreds:", storedCreds ? "EXISTS" : "NULL");
         console.log("[AuthContext] Loaded storedUrl:", storedUrl);
-        
+
         // Tenta primeiro AsyncStorage
         if (storedCreds) {
           try {
@@ -191,9 +229,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               hasUid: !!parsed.uid,
               tokenLength: parsed.accessToken?.length
             });
-            
+
             // Valida se tem TODOS os campos necessários
-            if (parsed.accessToken && parsed.accessToken.length > 10 && 
+            if (parsed.accessToken && parsed.accessToken.length > 10 &&
                 parsed.client && parsed.uid) {
               console.log("[AuthContext] Valid credentials found in AsyncStorage");
               setCredentials(parsed);
@@ -227,7 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log("[AuthContext] No credentials in SQLite:", e);
           }
         }
-        
+
         if (storedUrl) {
           let cleanUrl = storedUrl.replace(/\/$/, "");
           if (!cleanUrl.endsWith("/api")) {
@@ -245,6 +283,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     loadSession();
   }, []);
+
+  // ⏰ Agenda auto-refresh quando credenciais são carregadas
+  useEffect(() => {
+    if (credentials && baseUrl) {
+      console.log("[AuthContext] ⏰ Credentials loaded - scheduling auto-refresh");
+      scheduleAutoRefresh();
+    } else {
+      // Limpa timer se não estiver logado
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    }
+  }, [credentials, baseUrl, scheduleAutoRefresh]);
 
   const setBaseUrl = useCallback(async (url: string) => {
     let clean = url.replace(/\/$/, "");
@@ -322,6 +374,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setCredentials(null);
     await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
+    
+    // Limpa timer de auto-refresh
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+      console.log("[AuthContext] 🧹 Auto-refresh timer cleared on logout");
+    }
+    
     // Limpa também do SQLite
     try {
       const db = require("@/databases/database").getDB();
@@ -426,6 +486,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
   }, [credentials, baseUrl]);
+
+  // Atualiza o ref para o auto-refresh usar
+  useEffect(() => {
+    refreshCredentialsRef.current = refreshCredentials;
+  }, [refreshCredentials]);
 
   const testConnection = useCallback(
     async (testUrl: string): Promise<{ ok: boolean; message: string }> => {

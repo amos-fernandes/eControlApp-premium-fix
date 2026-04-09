@@ -187,10 +187,26 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
   } catch (error: any) {
     console.error("[CollectionService] finishOrder error:", error.response?.data || error.message);
     console.error("[CollectionService] Status:", error.response?.status);
-    console.error("[CollectionService] Headers enviados:", headers);
-    console.error("[CollectionService] Config axios:", { url, method: "POST", withCredentials: false });
-    
+    console.error("[CollectionService] Is Network Error:", error.message.includes("Network Error") || error.message.includes("Network request failed"));
+
+    // Se é 401, token expirado
     if (error.response?.status === 401) throw new Error("SESSION_EXPIRED");
+
+    // Network Error mas sem response - pode ser falso positivo (dados enviados com sucesso)
+    const isNetworkError = error.message.includes("Network Error") || error.message.includes("Network request failed");
+    if (isNetworkError && !error.response) {
+      console.warn("[CollectionService] ⚠️  Network Error sem resposta HTTP - pode ser falso positivo");
+      console.warn("[CollectionService] 💡 Os dados PODEM ter sido enviados com sucesso");
+      console.warn("[CollectionService] 💡 Retornando sucesso mesmo assim para evitar duplicação");
+      // Retorna mock para evitar que o usuário tente reenviar
+      return {
+        success: true,
+        warning: "NETWORK_ERROR_POSSIBLE_SUCCESS",
+        message: "Dados enviados mas servidor não respondeu corretamente. Verifique o status da OS.",
+        status: "checking"
+      };
+    }
+
     throw new Error(error.response?.data?.message || error.response?.data?.error || "Erro ao enviar para conferência.");
   }
 };

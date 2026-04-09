@@ -1,6 +1,6 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   FlatList,
   Platform,
@@ -25,19 +25,23 @@ import {
   getVoyageName,
   hasVoyage,
 } from "@/services/servicesOrders";
+import { refreshAuthToken } from "@/lib/token-sync";
 import type { ServiceOrder } from "@/services/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 type Tab = "com" | "sem";
 
 export default function VoyagesScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { credentials, baseUrl } = useAuth();
+  const { credentials, baseUrl, logout } = useAuth();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>("com");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [refreshAttempts, setRefreshAttempts] = useState(0);
+  const MAX_REFRESH_ATTEMPTS = 3;
 
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, refetch, isRefetching, error } = useQuery({
     queryKey: ["service_orders_voyages", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
@@ -45,7 +49,7 @@ export default function VoyagesScreen() {
       // Filtro padrão de 30 dias antes e 7 dias depois (igual à tela principal)
       const now = new Date();
       const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 7);
       const sevenDaysAfter = new Date(now);
       sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
 
@@ -64,11 +68,40 @@ export default function VoyagesScreen() {
       });
     },
     enabled: !!credentials,
+    // 💾 Mantém dados por 30 minutos antes de considerar "stale"
+    staleTime: 30 * 60 * 1000, // 30 minutos
+    // 🗑️ Garbage collection após 2 horas
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas
     retry: (failureCount, error) => {
       if (error.message === "SESSION_EXPIRED") return false;
       return failureCount < 2;
     },
   });
+
+  // Handle SESSION_EXPIRED com refresh automático
+  useEffect(() => {
+    if (isError && error?.message === "SESSION_EXPIRED" && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
+      console.log(`[VoyagesScreen] SESSION_EXPIRED - Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
+      
+      const attemptRefreshAndRetry = async () => {
+        const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/api";
+        const refreshed = await refreshAuthToken(baseUrlForRefresh);
+        
+        if (refreshed) {
+          console.log("[VoyagesScreen] ✅ Token refreshed - retrying once");
+          setRefreshAttempts(prev => prev + 1);
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["service_orders_voyages"] });
+          }, 500);
+        } else {
+          console.error("[VoyagesScreen] ❌ Refresh failed - stopping retries");
+          setRefreshAttempts(MAX_REFRESH_ATTEMPTS);
+        }
+      };
+      
+      attemptRefreshAndRetry();
+    }
+  }, [isError, error, refreshAttempts, baseUrl, logout, queryClient]);
 
   const withVoyage = useMemo(
     () => (data || []).filter((o: ServiceOrder | null | undefined) => o && hasVoyage(o)),

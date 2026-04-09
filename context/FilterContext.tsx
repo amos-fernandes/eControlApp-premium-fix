@@ -33,7 +33,7 @@ const defaultFilters: ServiceOrderFilters = {
   status: "", // Vazio significa "Todos" (que será tratado como "acting": running + started)
   type: "",
   hasVoyage: "",
-  startDate: getDateDaysFromNow(-30),  // 30 dias atrás
+  startDate: getDateDaysFromNow(-7),  // 30 dias atrás
   endDate: getDateDaysFromNow(7),      // 7 dias depois
   routeName: "",
   search: "",

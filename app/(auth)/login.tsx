@@ -21,9 +21,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const DEFAULT_BASE_URL = "https://testeaplicativo.econtrole.com";
-const DEFAULT_EMAIL = "motoristaapp@econtrole.com";
-const DEFAULT_PASSWORD = "ecomotoapp";
+const DEFAULT_BASE_URL = "";//"https://testeaplicativo.econtrole.com";
+const DEFAULT_EMAIL = "";//"motoristaapp@econtrole.com";
+const DEFAULT_PASSWORD = "";//"ecomotoapp";
 const CREDENTIALS_KEY = "econtrole_credentials";
 
 export default function LoginScreen() {
@@ -114,7 +114,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, "#89c2a1", "#467457"]}
+      colors={[Colors.primaryDark, "#89c2a1", "#9bbea8"]}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <KeyboardAvoidingView
