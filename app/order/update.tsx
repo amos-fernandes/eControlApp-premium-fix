@@ -383,17 +383,23 @@ export default function UpdateOrderScreen() {
 
     setIsSubmitting(true);
     
-    // Tenta fazer upload das fotos, mas continua se falhar
+    // Tenta fazer upload das fotos, mas continua se falhar ou pular
     let uploadSuccess = true;
     if (photos.length > 0) {
       console.log(`[UpdateOrder] Iniciando upload de ${photos.length} fotos...`);
       for (const uri of photos) {
         try {
-          await CollectionService.uploadImageToS3(uri, order.id);
+          const result = await CollectionService.uploadImageToS3(uri, order.id);
+          // Verifica se foi pulado (servidor de teste)
+          if (result?.skipped) {
+            console.log(`[UpdateOrder] ⏭️ Upload pulado: ${result.reason}`);
+            uploadSuccess = true; // Não conta como erro
+            break;
+          }
         } catch (uploadError: any) {
           console.warn("[UpdateOrder] Upload falhou, mas continuando...", uploadError.message);
           uploadSuccess = false;
-          break; // Para de tentar as outras fotos
+          break;
         }
       }
     }
