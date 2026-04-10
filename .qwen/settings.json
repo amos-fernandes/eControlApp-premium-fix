@@ -20,7 +20,12 @@
       "Bash(mv *)",
       "Bash(identify *)",
       "Bash(git add *)",
-      "Bash(eas *)"
+      "Bash(eas *)",
+      "Bash(do *)",
+      "Bash(done)",
+      "Bash(git *)",
+      "Bash(uname *)",
+      "Bash(sudo *)"
     ]
   },
   "$version": 3

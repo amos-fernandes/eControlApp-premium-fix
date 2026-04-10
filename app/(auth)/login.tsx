@@ -131,7 +131,7 @@ export default function LoginScreen() {
               <Image 
                 source={require('@/assets/images/icon.png')} 
                 style={styles.logoImage}
-                resizeMode="contain"
+                resizeMode="stretch"
               />
             </View>
             <Text style={styles.appName}>eControle</Text>
