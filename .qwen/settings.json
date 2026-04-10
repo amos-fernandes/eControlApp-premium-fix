@@ -28,7 +28,8 @@
       "Bash(sudo *)",
       "Bash(echo *)",
       "Bash(mkdir *)",
-      "Bash(sleep *)"
+      "Bash(sleep *)",
+      "Bash(tail *)"
     ]
   },
   "$version": 3
