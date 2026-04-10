@@ -14,7 +14,13 @@
       "Bash(java *)",
       "Bash(/opt/android-studio/jbr/bin/java *)",
       "Bash(chmod *)",
-      "Bash(./gradlew *)"
+      "Bash(./gradlew *)",
+      "Bash(file *)",
+      "Bash(convert *)",
+      "Bash(mv *)",
+      "Bash(identify *)",
+      "Bash(git add *)",
+      "Bash(eas *)"
     ]
   },
   "$version": 3

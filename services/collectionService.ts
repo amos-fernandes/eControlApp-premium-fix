@@ -213,7 +213,7 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
 };
 
 /**
- * Gera hash SHA256 usando expo-crypto (nativo do dispositivo)
+ * Gera hash SHA256 de uma string usando expo-crypto
  */
 async function sha256(message: string): Promise<string> {
   const hashBuffer = await Crypto.digestStringAsync(
@@ -224,24 +224,38 @@ async function sha256(message: string): Promise<string> {
 }
 
 /**
- * Gera HMAC-SHA256 implementando o algoritmo manualmente
+ * Converte Uint8Array para string binária (cada byte = 1 char com code 0-255)
+ * Necessário porque expo-crypto só aceita strings, não raw bytes
+ */
+function bytesToBinaryString(bytes: Uint8Array): string {
+  // Processar em chunks para evitar stack overflow
+  let result = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    result += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return result;
+}
+
+/**
+ * Gera HMAC-SHA256 implementado manualmente
  * HMAC(K, m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
  *
- * Equivalente ao Postman:
+ * Equivalente ao Postman crypto.subtle:
  *   payloadToSign = `${timestamp}.${rawBody}`
  *   signature = HMAC-SHA256(secret, payloadToSign)
  */
 async function hmacSha256(key: string, message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyBytes = encoder.encode(key);
-  const msgBytes = encoder.encode(message);
   const blockSize = 64; // SHA-256 block size
 
-  // Step 1: K' = key padded or hashed to blockSize
+  // Step 1: K' = key padded or hashed to blockSize bytes
   let paddedKey: Uint8Array;
+  const keyBytes = new TextEncoder().encode(key);
   if (keyBytes.length > blockSize) {
-    // If key is longer than block size, hash it
-    const hashHex = await sha256(key);
+    // Se key > blockSize, hash it first
+    const keyBinary = bytesToBinaryString(keyBytes);
+    const hashHex = await sha256(keyBinary);
     const hashBytes = new Uint8Array(hashHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
     paddedKey = new Uint8Array(blockSize);
     paddedKey.set(hashBytes);
@@ -263,17 +277,23 @@ async function hmacSha256(key: string, message: string): Promise<string> {
   }
 
   // Step 4: innerHash = H(K' ⊕ ipad || message)
+  const msgBytes = new TextEncoder().encode(message);
   const innerData = new Uint8Array(ipad.length + msgBytes.length);
   innerData.set(ipad);
   innerData.set(msgBytes, ipad.length);
-  const innerHex = await sha256(new TextDecoder().decode(innerData));
+
+  // Converte bytes para binary string antes de hash
+  const innerBinary = bytesToBinaryString(innerData);
+  const innerHex = await sha256(innerBinary);
   const innerBytes = new Uint8Array(innerHex.match(/.{2}/g)!.map(b => parseInt(b, 16)));
 
   // Step 5: HMAC = H(K' ⊕ opad || innerHash)
   const outerData = new Uint8Array(opad.length + innerBytes.length);
   outerData.set(opad);
   outerData.set(innerBytes, opad.length);
-  const hmacHex = await sha256(new TextDecoder().decode(outerData));
+
+  const outerBinary = bytesToBinaryString(outerData);
+  const hmacHex = await sha256(outerBinary);
 
   return hmacHex;
 }
