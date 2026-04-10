@@ -25,7 +25,10 @@
       "Bash(done)",
       "Bash(git *)",
       "Bash(uname *)",
-      "Bash(sudo *)"
+      "Bash(sudo *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(sleep *)"
     ]
   },
   "$version": 3
