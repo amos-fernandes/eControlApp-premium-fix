@@ -209,6 +209,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // 🔥 Valida token silenciosamente (GET /auth/validate_token)
+  // Definido antes do loadSession para evitar referência antes da declaração
+  const validateTokenSilently = useCallback(async (): Promise<boolean> => {
+    if (!credentials || !baseUrl) {
+      console.log("[AuthContext] No credentials or URL to validate");
+      return false;
+    }
+
+    try {
+      console.log("[AuthContext] 🔍 Validating token with server...");
+      const validateUrl = `${baseUrl}/auth/validate_token`;
+      const headers = {
+        "Content-Type": "application/json",
+        "access-token": credentials.accessToken,
+        client: credentials.client,
+        uid: credentials.uid,
+      };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
+      const response = await fetch(validateUrl, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      console.log("[AuthContext] Validate response status:", response.status);
+
+      if (response.status === 401) {
+        console.log("[AuthContext] ❌ Token expired (401)");
+        return false;
+      }
+
+      if (!response.ok) {
+        console.log("[AuthContext] ❌ Validate failed:", response.status);
+        return false;
+      }
+
+      // Token válido - atualiza com novos headers se vierem
+      const newAccessToken = response.headers.get("access-token") || credentials.accessToken;
+      const newClient = response.headers.get("client") || credentials.client;
+      const newUid = response.headers.get("uid") || credentials.uid;
+
+      if (newAccessToken !== credentials.accessToken || newClient !== credentials.client) {
+        console.log("[AuthContext] 🔄 Token refreshed during validation");
+        const updatedCreds: Credentials = {
+          accessToken: newAccessToken,
+          client: newClient,
+          uid: newUid,
+          email: credentials.email,
+        };
+        setCredentials(updatedCreds);
+        await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Token validation error:", error.message);
+      // Se é network error, pode ser que está offline - mantém credenciais
+      if (error.name === "AbortError" || error.message?.includes("Network")) {
+        console.warn("[AuthContext] ⚠️ Network error during validation - keeping credentials (offline mode)");
+        return true; // Assume válido se está offline
+      }
+      return false;
+    }
+  }, [credentials, baseUrl]);
+
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -274,6 +344,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBaseUrlState(cleanUrl);
           baseUrlRef.current = cleanUrl;
           await AsyncStorage.setItem(BASE_URL_KEY, cleanUrl); // Atualiza o storage
+        }
+
+        // 🔥 VALIDAÇÃO CRÍTICA: Testa se o token ainda está válido
+        // Se token expirado, limpa tudo e força re-login
+        if (credentials) {
+          const isValid = await validateTokenSilently();
+          if (!isValid) {
+            console.warn("[AuthContext] ⚠️ Token EXPIRADO - limpando credenciais e forçando re-login");
+            setCredentials(null);
+            // Limpa AsyncStorage mas mantém baseUrl
+            await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
+            try {
+              const db = require("@/databases/database").getDB();
+              db.runSync('DELETE FROM credentials');
+              console.log("[AuthContext] 🧹 Credenciais SQLite removidas");
+            } catch (e) {
+              console.error("[AuthContext] Error clearing SQLite:", e);
+            }
+          } else {
+            console.log("[AuthContext] ✅ Token validado com sucesso");
+          }
         }
       } catch (error) {
         console.error("Failed to load session:", error);
