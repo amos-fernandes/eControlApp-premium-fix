@@ -209,22 +209,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // 🔥 Valida token silenciosamente (GET /auth/validate_token)
+  // 🔥 Valida credenciais silenciosamente (GET /auth/validate_token)
   // Definido antes do loadSession para evitar referência antes da declaração
-  const validateTokenSilently = useCallback(async (): Promise<boolean> => {
-    if (!credentials || !baseUrl) {
+  // Versão que aceita parâmetros para não depender do state
+  const validateTokenCredentials = useCallback(async (creds: Credentials, url: string): Promise<boolean> => {
+    if (!creds || !url) {
       console.log("[AuthContext] No credentials or URL to validate");
       return false;
     }
 
     try {
       console.log("[AuthContext] 🔍 Validating token with server...");
-      const validateUrl = `${baseUrl}/auth/validate_token`;
+      console.log("[AuthContext] URL:", `${url}/auth/validate_token`);
+      console.log("[AuthContext] Token (partial):", creds.accessToken.substring(0, 10) + "...");
+
+      const validateUrl = `${url}/auth/validate_token`;
       const headers = {
         "Content-Type": "application/json",
-        "access-token": credentials.accessToken,
-        client: credentials.client,
-        uid: credentials.uid,
+        "access-token": creds.accessToken,
+        client: creds.client,
+        uid: creds.uid,
       };
 
       const controller = new AbortController();
@@ -250,21 +254,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      // Token válido - atualiza com novos headers se vierem
-      const newAccessToken = response.headers.get("access-token") || credentials.accessToken;
-      const newClient = response.headers.get("client") || credentials.client;
-      const newUid = response.headers.get("uid") || credentials.uid;
+      // Token válido - retorna novos headers se vierem
+      const newAccessToken = response.headers.get("access-token") || creds.accessToken;
+      const newClient = response.headers.get("client") || creds.client;
+      const newUid = response.headers.get("uid") || creds.uid;
 
-      if (newAccessToken !== credentials.accessToken || newClient !== credentials.client) {
+      if (newAccessToken !== creds.accessToken || newClient !== creds.client) {
         console.log("[AuthContext] 🔄 Token refreshed during validation");
-        const updatedCreds: Credentials = {
-          accessToken: newAccessToken,
-          client: newClient,
-          uid: newUid,
-          email: credentials.email,
-        };
-        setCredentials(updatedCreds);
-        await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+        // Atualiza as credenciais com novos headers
+        creds.accessToken = newAccessToken;
+        creds.client = newClient;
+        creds.uid = newUid;
       }
 
       return true;
@@ -277,7 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return false;
     }
-  }, [credentials, baseUrl]);
+  }, []);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -288,6 +288,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
         console.log("[AuthContext] Loaded storedCreds:", storedCreds ? "EXISTS" : "NULL");
         console.log("[AuthContext] Loaded storedUrl:", storedUrl);
+
+        // 🔥 CRÍTICO: Guarda credenciais em variável local para validação
+        let loadedCreds: Credentials | null = null;
+        let loadedUrl: string = DEFAULT_BASE_URL;
 
         // Tenta primeiro AsyncStorage
         if (storedCreds) {
@@ -304,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (parsed.accessToken && parsed.accessToken.length > 10 &&
                 parsed.client && parsed.uid) {
               console.log("[AuthContext] Valid credentials found in AsyncStorage");
-              setCredentials(parsed);
+              loadedCreds = parsed;
             } else {
               console.log("[AuthContext] Incomplete credentials in AsyncStorage - trying SQLite");
             }
@@ -314,14 +318,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Fallback: Tenta buscar do SQLite
-        if (!credentials) {
+        if (!loadedCreds) {
           try {
             const { getCredentials } = require("@/databases/database");
             const sqliteCreds = getCredentials();
             console.log("[AuthContext] SQLite credentials:", sqliteCreds);
 
             if (sqliteCreds && sqliteCreds.accessToken) {
-              const credsFromSQLite: Credentials = {
+              loadedCreds = {
                 accessToken: sqliteCreds.accessToken,
                 client: sqliteCreds.client || '',
                 uid: sqliteCreds.uid || '',
@@ -329,31 +333,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               };
               console.log("[AuthContext] ✅ Credenciais carregadas do SQLite");
               console.log("[AuthContext] 🕐 Token criado em:", sqliteCreds.created_at || "N/A");
-              setCredentials(credsFromSQLite);
             }
           } catch (e) {
             console.log("[AuthContext] No credentials in SQLite:", e);
           }
         }
 
+        // Processa URL
         if (storedUrl) {
-          let cleanUrl = storedUrl.replace(/\/$/, "");
-          if (!cleanUrl.endsWith("/api")) {
-            cleanUrl = cleanUrl + "/api";
+          loadedUrl = storedUrl.replace(/\/$/, "");
+          if (!loadedUrl.endsWith("/api")) {
+            loadedUrl = loadedUrl + "/api";
           }
-          setBaseUrlState(cleanUrl);
-          baseUrlRef.current = cleanUrl;
-          await AsyncStorage.setItem(BASE_URL_KEY, cleanUrl); // Atualiza o storage
         }
 
+        setBaseUrlState(loadedUrl);
+        baseUrlRef.current = loadedUrl;
+        await AsyncStorage.setItem(BASE_URL_KEY, loadedUrl);
+
         // 🔥 VALIDAÇÃO CRÍTICA: Testa se o token ainda está válido
-        // Se token expirado, limpa tudo e força re-login
-        if (credentials) {
-          const isValid = await validateTokenSilently();
+        // Usa variável local (não depende do state)
+        if (loadedCreds) {
+          console.log("[AuthContext] 🔍 Validando token com o servidor...");
+          const isValid = await validateTokenCredentials(loadedCreds, loadedUrl);
+
           if (!isValid) {
             console.warn("[AuthContext] ⚠️ Token EXPIRADO - limpando credenciais e forçando re-login");
-            setCredentials(null);
-            // Limpa AsyncStorage mas mantém baseUrl
+            // NÃO seta credenciais - força re-login
             await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
             try {
               const db = require("@/databases/database").getDB();
@@ -364,6 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           } else {
             console.log("[AuthContext] ✅ Token validado com sucesso");
+            setCredentials(loadedCreds); // Só agora seta as credenciais
           }
         }
       } catch (error) {
