@@ -1213,6 +1213,37 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
+## 🎯 NOVIDADES v1.8.1 (2026-04-14) - PhD Correção URL Base
+
+### **CORREÇÃO CRÍTICA: URL Base com /api duplicado** ✅🔧
+- **Problema**: App não conectava após login - credenciais não persistiam
+- **Causa Raiz**: Múltiplos arquivos adicionavam `/api` na URL automaticamente
+  - URL salva: `https://testeaplicativo.econtrole.com/api`
+  - AuthContext adicionava `/api` de novo → `https://testeaplicativo.econtrole.com/api/api`
+  - Login falhava silently, credenciais não salvavam
+- **Solução**: Remoção de TODAS as adições automáticas de `/api`
+- **URL Correta**: `https://testeaplicativo.econtrole.com` (SEM /api no final)
+  - Login: `https://testeaplicativo.econtrole.com/api/auth/sign_in` ✅
+  - OS: `https://testeaplicativo.econtrole.com/api/service_orders` ✅
+
+**Arquivos Corrigidos (6):**
+1. `context/AuthContext.tsx` - Removido `if (!cleanBase.endsWith("/api")) cleanBase += "/api"`
+2. `services/retrieveUserSession.ts` - Removida adição em 4 lugares
+3. `services/api.ts` - Removido warning e adição de `/api`
+4. `services/collectionService.ts` - Removido `baseUrl += "/api"`
+5. `app/qrscanner.tsx` - Removido em 2 lugares + DEFAULT_BASE_URL corrigido
+6. `scripts/test-connection.js` - Atualizado para URL correta
+
+**Testes Validados:**
+- ✅ Login: 200 OK
+- ✅ Busca OS: 200 OK (219 OS recebidas)
+- ✅ Validação token: 200 OK
+- ✅ 60/61 testes Jest passando
+
+**Status:** ✅ **TESTADO E APROVADO** - App conecta normalmente agora!
+
+---
+
 ## 🎯 NOVIDADES v1.8.0 (2026-04-14) - PhD Paginação Automática
 
 ### **CORREÇÃO CRÍTICA: Paginação Automática para Buscar TODAS as OS** ✅📄
@@ -1286,26 +1317,26 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
-## 📊 Resumo da v1.8.0
+## 📊 Resumo da v1.8.x
 
-| Feature | Status | Descrição |
-|---------|--------|-----------|
-| **Paginação** | ✅ | Busca automática de todas as páginas da API |
-| **Detecção** | ✅ | 5 formatos de paginação suportados |
-| **Range** | ✅ | Mantido -7/+7 dias (requisito preservado) |
-| **Logs** | ✅ | Debug completo para diagnóstico |
-| **Segurança** | ✅ | Limite de 100 páginas (evita loop infinito) |
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **Paginação** | v1.8.0 | ✅ | Busca automática de todas as páginas da API |
+| **Correção URL** | v1.8.1 | ✅ | Remoção de adições automáticas de `/api` |
+| **Range** | - | ✅ | Mantido -7/+7 dias (requisito preservado) |
+| **Testes** | - | ✅ | 60/61 passando, validação manual OK |
 
 **Commits na branch `developer`**:
 ```
-[PENDENTE] feat: paginação automática para buscar todas as OS da API
+[PENDENTE] fix: remover adições automáticas de /api na URL base (v1.8.1)
+[PENDENTE] feat: paginação automática para buscar todas as OS da API (v1.8.0)
 ```
 
 ---
 
 **Última Atualização**: 2026-04-14
-**Versão**: 1.8.0
+**Versão**: 1.8.1
 **Status**: ✅ Desenvolvimento (branch `developer`)
-**Próximo Release**: v1.8.0 (merge para master após testes)
+**Próximo Release**: v1.8.1 (merge para master após testes)
 
 ---

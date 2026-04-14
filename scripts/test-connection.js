@@ -5,7 +5,7 @@
 const https = require('https');
 const url = require('url');
 
-const BASE_URL = "https://testeaplicativo.econtrole.com";
+const BASE_URL = "https://testeaplicativo.econtrole.com";  // ✅ SEM /api
 const EMAIL = "motoristaapp@econtrole.com";
 const PASSWORD = "ecomotoapp";
 

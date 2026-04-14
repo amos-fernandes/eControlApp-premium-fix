@@ -21,9 +21,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const DEFAULT_BASE_URL = "";//"https://testeaplicativo.econtrole.com";
-const DEFAULT_EMAIL = "";//"motoristaapp@econtrole.com";
-const DEFAULT_PASSWORD = "";//"ecomotoapp";
+const DEFAULT_BASE_URL = "";
+const DEFAULT_EMAIL = "";
+const DEFAULT_PASSWORD = "";
 const CREDENTIALS_KEY = "econtrole_credentials";
 
 export default function LoginScreen() {
@@ -86,13 +86,13 @@ export default function LoginScreen() {
             try {
               // Limpa AsyncStorage
               await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
-              
+
               // Limpa SQLite
               const { getDB } = require("@/databases/database");
               const db = getDB();
               db.runSync('DELETE FROM credentials');
               db.runSync('DELETE FROM users');
-              
+
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Alert.alert("Sucesso", "Dados limpos! O app será recarregado.", [
                 {

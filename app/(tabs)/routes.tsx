@@ -79,7 +79,7 @@ export default function RoutesScreen() {
       console.log(`[RoutesScreen] SESSION_EXPIRED - Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
       
       const attemptRefreshAndRetry = async () => {
-        const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/api";
+        const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/";
         const refreshed = await refreshAuthToken(baseUrlForRefresh);
         
         if (refreshed) {

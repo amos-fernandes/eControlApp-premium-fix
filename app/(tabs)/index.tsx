@@ -95,7 +95,7 @@ export default function OrdersScreen() {
       }
 
       // Tenta refresh usando token-sync (single-flight)
-      const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/api";
+      const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/";
       const refreshed = await refreshAuthToken(baseUrlForRefresh);
 
       if (refreshed) {
