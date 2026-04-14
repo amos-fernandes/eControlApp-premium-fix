@@ -1213,6 +1213,43 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
+## 🎯 NOVIDADES v1.8.0 (2026-04-14) - PhD Paginação Automática
+
+### **CORREÇÃO CRÍTICA: Paginação Automática para Buscar TODAS as OS** ✅📄
+- **Problema**: App trazia apenas primeiras ~100 OS no login, ignorando o resto
+- **Causa**: API é paginada (padrão Rails/Kaminari/WillPaginate), app não buscava páginas seguintes
+- **Solução**: Implementação de paginação automática com detecção inteligente de formato
+- **Arquivo**: `services/servicesOrders.ts`
+
+**Implementação:**
+- Loop automático que busca todas as páginas (máx 100 páginas = 10.000 OS)
+- Detecção automática de 5 formatos de paginação:
+  1. `data.pagination.next_page` (Rails Kaminari)
+  2. `data.next_page` (paginação simples)
+  3. `data.links.next` (JSON:API)
+  4. `data.meta.total_pages` (meta pagination)
+  5. `data.total_pages` (customizado)
+- Fallback: Se recebeu < 100 itens, acabou
+- Parâmetros: `page=N&per_page=100` (máximo razoável por página)
+- Range de datas mantido: -7/+7 dias (requisito preservado)
+
+**Logs de Debug Incluídos:**
+- `📄 [PAGINAÇÃO] Iniciando paginação automática...`
+- `📄 [PAGINAÇÃO] Buscando página N...`
+- `🔍💰🔍 [PAGINAÇÃO] ESTRUTURA COMPLETA DA RESPOSTA 🔍💰🔍`
+- Headers: X-Total, X-Per-Page, X-Page, X-Total-Pages
+- `📄 [PAGINAÇÃO] ✅ Buscadas N páginas, total X ordens`
+
+**Status:** ✅ **IMPLEMENTADO** - Pronto para teste em produção
+
+**Como Testar:**
+1. Login no app
+2. Observar logs no terminal/console
+3. Verificar se traz mais OS que antes
+4. Logs mostrarão quantas páginas foram buscadas
+
+---
+
 ## 🎯 NOVIDADES v1.7.0 (2026-03-18) - PhD Refactor & Persistence
 
 ### **Carga de Dados e Range de Datas** ✅
@@ -1246,5 +1283,29 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 - **MTR**: Lógica de token CETESB e Webhook validada com **10/11 testes aprovados**.
 - **Download**: Validada lógica de download de PDF e compartilhamento nativo.
 - **Navegabilidade**: Validada carga de **1186 OS** com filtragem de **542 ativas** no ambiente testeaplicativo.
+
+---
+
+## 📊 Resumo da v1.8.0
+
+| Feature | Status | Descrição |
+|---------|--------|-----------|
+| **Paginação** | ✅ | Busca automática de todas as páginas da API |
+| **Detecção** | ✅ | 5 formatos de paginação suportados |
+| **Range** | ✅ | Mantido -7/+7 dias (requisito preservado) |
+| **Logs** | ✅ | Debug completo para diagnóstico |
+| **Segurança** | ✅ | Limite de 100 páginas (evita loop infinito) |
+
+**Commits na branch `developer`**:
+```
+[PENDENTE] feat: paginação automática para buscar todas as OS da API
+```
+
+---
+
+**Última Atualização**: 2026-04-14
+**Versão**: 1.8.0
+**Status**: ✅ Desenvolvimento (branch `developer`)
+**Próximo Release**: v1.8.0 (merge para master após testes)
 
 ---

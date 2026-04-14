@@ -29,7 +29,12 @@
       "Bash(echo *)",
       "Bash(mkdir *)",
       "Bash(sleep *)",
-      "Bash(tail *)"
+      "Bash(tail *)",
+      "Bash(nohup *)",
+      "Bash(break)",
+      "Bash(})",
+      "Bash(rm *)",
+      "Bash(npm test)"
     ]
   },
   "$version": 3

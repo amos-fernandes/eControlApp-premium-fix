@@ -25,6 +25,7 @@ export interface FilterServiceOrderState {
  * - Se tiver dados em cache, retorna imediatamente
  * - Se não tiver ou cache estiver vazio, busca da API e salva no cache
  * - Faz refresh automático do token se receber 401
+ * - ✅ PAGINAÇÃO AUTOMÁTICA: Detecta e busca todas as páginas
  */
 export const getServicesOrders = async ({ filters }: FilterServiceOrderState): Promise<ServiceOrder[]> => {
   console.log("getServicesOrders: Starting with filters:", filters);
@@ -48,18 +49,6 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
 
     const baseUrl = domainResult.data;
 
-    // Constrói URL com query params
-    const url = new URL(`${baseUrl}/service_orders`);
-    if (filters.status) url.searchParams.set("status", filters.status);
-    if (filters.so_type) url.searchParams.set("so_type", filters.so_type);
-    if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
-    if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
-    if (filters.voyage && filters.voyage !== "all") {
-      url.searchParams.set("voyage", filters.voyage);
-    }
-
-    console.log("getServicesOrders: Fetching from:", url.toString());
-
     // Headers de autenticação
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -68,49 +57,130 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       uid: credentials.uid,
     };
 
-    // Timeout de 20 segundos
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    // 📄 PAGINAÇÃO AUTOMÁTICA: Busca todas as páginas
+    let allOrders: ServiceOrder[] = [];
+    let currentPage = 1;
+    let hasMorePages = true;
+    const MAX_PAGES = 100; // Limite de segurança (evita loop infinito)
+    let pagesFetched = 0;
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers,
-      signal: controller.signal,
-    });
+    console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
-    clearTimeout(timeout);
+    while (hasMorePages && pagesFetched < MAX_PAGES) {
+      // Constrói URL com query params + paginação
+      const url = new URL(`${baseUrl}/service_orders`);
+      if (filters.status) url.searchParams.set("status", filters.status);
+      if (filters.so_type) url.searchParams.set("so_type", filters.so_type);
+      if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
+      if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
+      if (filters.voyage && filters.voyage !== "all") {
+        url.searchParams.set("voyage", filters.voyage);
+      }
+      
+      // ✅ Parâmetros de paginação (padrão Rails/Kaminari/WillPaginate)
+      url.searchParams.set("page", String(currentPage));
+      url.searchParams.set("per_page", "100"); // Máximo razoável por página
 
-    if (response.status === 401) {
-      console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
-      attemptRefresh = true;
-      throw new Error("SESSION_EXPIRED");
+      console.log(`📄 [PAGINAÇÃO] Buscando página ${currentPage}... URL: ${url.toString()}`);
+
+      // Timeout de 20 segundos
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (response.status === 401) {
+        console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
+        attemptRefresh = true;
+        throw new Error("SESSION_EXPIRED");
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        console.error(`getServicesOrders: API error ${response.status}:`, errorText.slice(0, 200));
+        throw new Error(`Erro ao buscar OS: ${response.status} - ${errorText.slice(0, 100)}`);
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Resposta não JSON da API");
+      }
+
+      const data = await response.json();
+      console.log(`📄 [PAGINAÇÃO] Página ${currentPage} recebida`);
+
+      // 🔍 DEBUG: Detectar estrutura de paginação da API
+      if (currentPage === 1) {
+        console.log("🔍💰🔍 [PAGINAÇÃO] ESTRUTURA COMPLETA DA RESPOSTA 🔍💰🔍");
+        console.log("🔍 [PAGINAÇÃO] Keys:", data ? Object.keys(data) : "null");
+        console.log("🔍 [PAGINAÇÃO] pagination:", JSON.stringify(data?.pagination));
+        console.log("🔍 [PAGINAÇÃO] meta:", JSON.stringify(data?.meta));
+        console.log("🔍 [PAGINAÇÃO] links:", JSON.stringify(data?.links));
+        console.log("🔍 [PAGINAÇÃO] current_page:", data?.current_page);
+        console.log("🔍 [PAGINAÇÃO] total_pages:", data?.total_pages);
+        console.log("🔍 [PAGINAÇÃO] next_page:", data?.next_page);
+        console.log("🔍 [PAGINAÇÃO] total_count:", data?.total_count);
+        console.log("🔍 [PAGINAÇÃO] X-Total (header):", response.headers.get("X-Total"));
+        console.log("🔍 [PAGINAÇÃO] X-Per-Page (header):", response.headers.get("X-Per-Page"));
+        console.log("🔍 [PAGINAÇÃO] X-Page (header):", response.headers.get("X-Page"));
+        console.log("🔍 [PAGINAÇÃO] X-Total-Pages (header):", response.headers.get("X-Total-Pages"));
+        console.log("🔍💰🔍 [FIM DEBUG PAGINAÇÃO] 🔍💰🔍");
+      }
+
+      // Extrai ordens da resposta
+      let pageOrders: ServiceOrder[] = [];
+      if (Array.isArray(data?.items)) {
+        pageOrders = data.items.filter((item: any) => item && typeof item === "object");
+      } else if (Array.isArray(data?.data)) {
+        pageOrders = data.data.filter((item: any) => item && typeof item === "object");
+      } else if (Array.isArray(data)) {
+        pageOrders = data.filter((item: any) => item && typeof item === "object");
+      } else if (Array.isArray(data?.service_orders)) {
+        pageOrders = data.service_orders.filter((item: any) => item && typeof item === "object");
+      }
+
+      console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens`);
+      allOrders = allOrders.concat(pageOrders);
+
+      // ✅ Detectar se há mais páginas
+      pagesFetched++;
+
+      // Método 1: Verificar next_page na resposta
+      if (data?.pagination?.next_page !== undefined) {
+        hasMorePages = data.pagination.next_page !== null;
+        console.log(`📄 [PAGINAÇÃO] Detectado pagination.next_page: ${hasMorePages}`);
+      } else if (data?.next_page !== undefined) {
+        hasMorePages = data.next_page !== null;
+        console.log(`📄 [PAGINAÇÃO] Detectado next_page: ${hasMorePages}`);
+      } else if (data?.links?.next !== undefined) {
+        hasMorePages = data.links.next !== null;
+        console.log(`📄 [PAGINAÇÃO] Detectado links.next: ${hasMorePages}`);
+      } else if (data?.meta?.total_pages !== undefined) {
+        hasMorePages = currentPage < data.meta.total_pages;
+        console.log(`📄 [PAGINAÇÃO] Detectado meta.total_pages: ${data.meta.total_pages}, hasMore: ${hasMorePages}`);
+      } else if (data?.total_pages !== undefined) {
+        hasMorePages = currentPage < data.total_pages;
+        console.log(`📄 [PAGINAÇÃO] Detectado total_pages: ${data.total_pages}, hasMore: ${hasMorePages}`);
+      } else {
+        // Método fallback: Se recebeu menos de 100 itens, acabou
+        hasMorePages = pageOrders.length >= 100;
+        console.log(`📄 [PAGINAÇÃO] Fallback: ${pageOrders.length} itens, hasMore: ${hasMorePages}`);
+      }
+
+      currentPage++;
     }
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      console.error(`getServicesOrders: API error ${response.status}:`, errorText.slice(0, 200));
-      throw new Error(`Erro ao buscar OS: ${response.status} - ${errorText.slice(0, 100)}`);
+    if (pagesFetched > 1) {
+      console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
     }
 
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Resposta não JSON da API");
-    }
-
-    const data = await response.json();
-    console.log("getServicesOrders: API response received");
-
-    // Handle various API response shapes
-    let orders: ServiceOrder[] = [];
-    if (Array.isArray(data?.items)) {
-      orders = data.items.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data?.data)) {
-      orders = data.data.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data)) {
-      orders = data.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data?.service_orders)) {
-      orders = data.service_orders.filter((item: any) => item && typeof item === "object");
-    }
+    let orders = allOrders;
 
     // --- FILTRAGEM CUSTOMIZADA ---
     // Se o filtro de status estiver vazio (Todos), filtramos para mostrar apenas 'atuando'
