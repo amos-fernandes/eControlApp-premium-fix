@@ -39,6 +39,7 @@ async function testPagination() {
     endDate.setDate(endDate.getDate() + 7);
 
     const url = new URL(`${BASE_URL}/service_orders`);
+    url.searchParams.set("status", "acting");
     url.searchParams.set("start_date", startDate.toISOString().split("T")[0]);
     url.searchParams.set("end_date", endDate.toISOString().split("T")[0]);
     url.searchParams.set("page", "1");

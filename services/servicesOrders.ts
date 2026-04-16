@@ -160,22 +160,25 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
       allOrders = allOrders.concat(pageOrders);
 
-      // ✅ Detectar se há mais páginas usando Headers E Corpo
-      const xNextPage = response.headers.get("X-Next-Page");
+      // ✅ Detectar se há mais páginas
+      // 1. Usando Headers (mais confiável)
       const xTotalPages = response.headers.get("X-Total-Pages");
+      const xNextPage = response.headers.get("X-Next-Page");
       
+      // 2. Usando o corpo da resposta (total_items)
+      const totalItems = data?.pagination?.total_items || data?.total_count || data?.meta?.total_count;
+
       if (xNextPage) {
         hasMorePages = true;
-        console.log(`📄 [PAGINAÇÃO] Próxima página via header X-Next-Page: ${xNextPage}`);
       } else if (xTotalPages) {
         hasMorePages = currentPage < parseInt(xTotalPages, 10);
-        console.log(`📄 [PAGINAÇÃO] Total de páginas via header: ${xTotalPages}, Atual: ${currentPage}`);
+      } else if (totalItems !== undefined) {
+        hasMorePages = allOrders.length < totalItems;
+        console.log(`📄 [PAGINAÇÃO] Progresso: ${allOrders.length}/${totalItems} itens`);
       } else if (data?.pagination?.next_page !== undefined) {
         hasMorePages = data.pagination.next_page !== null;
       } else if (data?.next_page !== undefined) {
         hasMorePages = data.next_page !== null;
-      } else if (data?.total_pages !== undefined) {
-        hasMorePages = currentPage < data.total_pages;
       } else {
         // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
         hasMorePages = pageOrders.length >= 100;
@@ -191,67 +194,10 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
     }
 
-    let orders = allOrders;
+    // Retorna todas as ordens vindas do servidor (sem filtros locais que ocultam dados)
+    const orders = allOrders;
 
-    // --- FILTRAGEM CUSTOMIZADA ---
-    // Se o filtro de status estiver vazio (Todos), filtramos para mostrar apenas 'atuando'
-    // e excluímos explicitamente canceladas e finalizadas.
-    if (!filters.status) {
-      console.log("getServicesOrders: Filtering for 'acting' orders (excluding finished/canceled)");
-      orders = orders.filter((o) => {
-        const status = (o.status || "").toLowerCase();
-        // Não mostramos finalizadas ou canceladas no modo 'Todos'
-        if (status === "finished" || status === "concluída" || status === "concluida" ||
-            status === "canceled" || status === "cancelada") {
-          return false;
-        }
-        // Mostramos apenas as que estão atuando ou pendentes
-        return true;
-      });
-    }
-    // ----------------------------
-
-    // --- FILTRO POR ATOR (USUÁRIO) ---
-    // motoristaapp@econtrole.com: NÃO vê OS finalizadas, canceladas ou agendadas
-    // suporte@econtrole.com: Vê TODAS as OS
-    const userEmail = credentials.uid?.toLowerCase() || "";
-    const isMotorista = userEmail.includes("motoristaapp");
-
-    // LOG: Status antes do filtro por ator
-    const statusBeforeFilter: Record<string, number> = {};
-    orders.forEach((o: any) => {
-      const s = o.status || 'unknown';
-      statusBeforeFilter[s] = (statusBeforeFilter[s] || 0) + 1;
-    });
-    console.log("getServicesOrders: Status ANTES do filtro por ator:", statusBeforeFilter);
-
-    if (isMotorista && !filters.status) {
-      console.log("getServicesOrders: Filtro por ATOR (motoristaapp) - excluindo finished/canceled/scheduled");
-      orders = orders.filter((o) => {
-        const status = (o.status || "").toLowerCase();
-        // Motorista só vê running e checking
-        if (status === "finished" || status === "concluída" || status === "concluida" ||
-            status === "canceled" || status === "cancelada" ||
-            status === "scheduled" || status === "agendada") {
-          return false;
-        }
-        return true;
-      });
-      console.log(`getServicesOrders: ${orders.length} orders after actor filter (motoristaapp)`);
-    } else if (userEmail.includes("suporte")) {
-      console.log("getServicesOrders: Filtro por ATOR (suporte) - mostrando TODAS as OS");
-    }
-    // ---------------------------------
-
-    console.log(`getServicesOrders: Received ${orders.length} orders after filtering`);
-
-    // Log dos status recebidos para debug
-    const statusCount: Record<string, number> = {};
-    orders.forEach((o: any) => {
-      const s = o.status || 'unknown';
-      statusCount[s] = (statusCount[s] || 0) + 1;
-    });
-    console.log("getServicesOrders: Status distribution:", statusCount);
+    console.log(`getServicesOrders: Received ${orders.length} orders from server`);
 
     // Salva no cache SQLite
     if (orders.length > 0) {
