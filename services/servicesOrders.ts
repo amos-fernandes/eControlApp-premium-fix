@@ -1,8 +1,11 @@
-import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransaction, getServiceOrders, getServiceOrder as getDBServiceOrder } from "@/databases/database";
+import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransaction, getServiceOrders, getServiceOrder as getDBServiceOrder, insertCredentials } from "@/databases/database";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { retrieveDomain } from "./retrieveUserSession";
 import type { ServiceOrder, ServiceExecution } from "./api";
 import type { Credentials } from "@/context/AuthContext";
 import { refreshAuthToken, getCurrentCredentials, clearTokenCache } from "@/lib/token-sync";
+
+const CREDENTIALS_KEY = "econtrole_credentials";
 
 export interface ApiConfig {
   baseUrl: string;
@@ -17,6 +20,32 @@ export interface FilterServiceOrderState {
     end_date?: string;
     voyage: string;
   };
+}
+
+/**
+ * Atualiza os tokens no cache/storage a partir dos headers de resposta da API
+ * Crucial para o funcionamento do Devise Token Auth (token rotation)
+ */
+async function updateTokensFromResponse(response: Response, currentUid: string) {
+  const accessToken = response.headers.get("access-token");
+  const client = response.headers.get("client");
+  const uid = response.headers.get("uid") || currentUid;
+
+  if (accessToken && client && uid) {
+    console.log("[TokenSync] 🔄 Atualizando tokens da resposta (rotation)...");
+    const updatedCreds = { accessToken, client, uid };
+    
+    // Salva em AsyncStorage
+    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+    
+    // Salva em SQLite
+    insertCredentials({
+      _id: 'main',
+      accessToken,
+      uid,
+      client,
+    });
+  }
 }
 
 /**
@@ -67,113 +96,96 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
     while (hasMorePages && pagesFetched < MAX_PAGES) {
-      // Constrói URL com query params + paginação
+      // 🛠️ CORREÇÃO: Usamos o endpoint padrão da API /api/service_orders
       const url = new URL(`${baseUrl}/service_orders`);
-      if (filters.status) url.searchParams.set("status", filters.status);
-      if (filters.so_type) url.searchParams.set("so_type", filters.so_type);
+
+      // Parâmetros conforme análise: status acting é o filtro do motorista
+      url.searchParams.set("status", filters.status || "acting");
+      url.searchParams.set("so_type", filters.so_type || "all");
+      url.searchParams.set("voyage", (filters.voyage && filters.voyage !== "all") ? filters.voyage : "all");
+
       if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
       if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
-      if (filters.voyage && filters.voyage !== "all") {
-        url.searchParams.set("voyage", filters.voyage);
-      }
       
-      // ✅ Parâmetros de paginação (padrão Rails/Kaminari/WillPaginate)
+      // ✅ Parâmetros de paginação
       url.searchParams.set("page", String(currentPage));
-      url.searchParams.set("per_page", "100"); // Máximo razoável por página
+      url.searchParams.set("per_page", "100");
 
       console.log(`📄 [PAGINAÇÃO] Buscando página ${currentPage}... URL: ${url.toString()}`);
 
-      // Timeout de 20 segundos
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20000);
 
       const response = await fetch(url.toString(), {
         method: "GET",
-        headers,
+        headers: {
+          ...headers,
+          "Accept": "application/json"
+        },
         signal: controller.signal,
       });
 
       clearTimeout(timeout);
 
+      // ✅ Atualiza tokens se o servidor enviou novos (rotation)
+      await updateTokensFromResponse(response, credentials.uid);
+
       if (response.status === 401) {
-        console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
-        attemptRefresh = true;
+        console.error("getServicesOrders: SESSION_EXPIRED");
         throw new Error("SESSION_EXPIRED");
       }
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        console.error(`getServicesOrders: API error ${response.status}:`, errorText.slice(0, 200));
-        throw new Error(`Erro ao buscar OS: ${response.status} - ${errorText.slice(0, 100)}`);
+        console.error(`getServicesOrders: API error ${response.status}`);
+        throw new Error(`Erro ao buscar OS: ${response.status}`);
       }
 
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
+        console.error("❌ [API ERROR] Resposta não JSON");
         throw new Error("Resposta não JSON da API");
       }
 
+      // ✅ Única chamada para json() por página
       const data = await response.json();
-      console.log(`📄 [PAGINAÇÃO] Página ${currentPage} recebida`);
-
-      // 🔍 DEBUG: Detectar estrutura de paginação da API
-      if (currentPage === 1) {
-        console.log("🔍💰🔍 [PAGINAÇÃO] ESTRUTURA COMPLETA DA RESPOSTA 🔍💰🔍");
-        console.log("🔍 [PAGINAÇÃO] Keys:", data ? Object.keys(data) : "null");
-        console.log("🔍 [PAGINAÇÃO] pagination:", JSON.stringify(data?.pagination));
-        console.log("🔍 [PAGINAÇÃO] meta:", JSON.stringify(data?.meta));
-        console.log("🔍 [PAGINAÇÃO] links:", JSON.stringify(data?.links));
-        console.log("🔍 [PAGINAÇÃO] current_page:", data?.current_page);
-        console.log("🔍 [PAGINAÇÃO] total_pages:", data?.total_pages);
-        console.log("🔍 [PAGINAÇÃO] next_page:", data?.next_page);
-        console.log("🔍 [PAGINAÇÃO] total_count:", data?.total_count);
-        console.log("🔍 [PAGINAÇÃO] X-Total (header):", response.headers.get("X-Total"));
-        console.log("🔍 [PAGINAÇÃO] X-Per-Page (header):", response.headers.get("X-Per-Page"));
-        console.log("🔍 [PAGINAÇÃO] X-Page (header):", response.headers.get("X-Page"));
-        console.log("🔍 [PAGINAÇÃO] X-Total-Pages (header):", response.headers.get("X-Total-Pages"));
-        console.log("🔍💰🔍 [FIM DEBUG PAGINAÇÃO] 🔍💰🔍");
-      }
-
-      // Extrai ordens da resposta
+      
+      // Extrai ordens da resposta (suporta vários formatos)
       let pageOrders: ServiceOrder[] = [];
-      if (Array.isArray(data?.items)) {
-        pageOrders = data.items.filter((item: any) => item && typeof item === "object");
-      } else if (Array.isArray(data?.data)) {
-        pageOrders = data.data.filter((item: any) => item && typeof item === "object");
-      } else if (Array.isArray(data)) {
-        pageOrders = data.filter((item: any) => item && typeof item === "object");
-      } else if (Array.isArray(data?.service_orders)) {
-        pageOrders = data.service_orders.filter((item: any) => item && typeof item === "object");
+      const rawItems = data?.items || data?.data || data?.service_orders || (Array.isArray(data) ? data : []);
+      
+      if (Array.isArray(rawItems)) {
+        pageOrders = rawItems.filter((item: any) => item && typeof item === "object");
       }
 
-      console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens`);
+      console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
       allOrders = allOrders.concat(pageOrders);
 
-      // ✅ Detectar se há mais páginas
-      pagesFetched++;
-
-      // Método 1: Verificar next_page na resposta
-      if (data?.pagination?.next_page !== undefined) {
+      // ✅ Detectar se há mais páginas usando Headers E Corpo
+      const xNextPage = response.headers.get("X-Next-Page");
+      const xTotalPages = response.headers.get("X-Total-Pages");
+      
+      if (xNextPage) {
+        hasMorePages = true;
+        console.log(`📄 [PAGINAÇÃO] Próxima página via header X-Next-Page: ${xNextPage}`);
+      } else if (xTotalPages) {
+        hasMorePages = currentPage < parseInt(xTotalPages, 10);
+        console.log(`📄 [PAGINAÇÃO] Total de páginas via header: ${xTotalPages}, Atual: ${currentPage}`);
+      } else if (data?.pagination?.next_page !== undefined) {
         hasMorePages = data.pagination.next_page !== null;
-        console.log(`📄 [PAGINAÇÃO] Detectado pagination.next_page: ${hasMorePages}`);
       } else if (data?.next_page !== undefined) {
         hasMorePages = data.next_page !== null;
-        console.log(`📄 [PAGINAÇÃO] Detectado next_page: ${hasMorePages}`);
-      } else if (data?.links?.next !== undefined) {
-        hasMorePages = data.links.next !== null;
-        console.log(`📄 [PAGINAÇÃO] Detectado links.next: ${hasMorePages}`);
-      } else if (data?.meta?.total_pages !== undefined) {
-        hasMorePages = currentPage < data.meta.total_pages;
-        console.log(`📄 [PAGINAÇÃO] Detectado meta.total_pages: ${data.meta.total_pages}, hasMore: ${hasMorePages}`);
       } else if (data?.total_pages !== undefined) {
         hasMorePages = currentPage < data.total_pages;
-        console.log(`📄 [PAGINAÇÃO] Detectado total_pages: ${data.total_pages}, hasMore: ${hasMorePages}`);
       } else {
-        // Método fallback: Se recebeu menos de 100 itens, acabou
+        // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
         hasMorePages = pageOrders.length >= 100;
-        console.log(`📄 [PAGINAÇÃO] Fallback: ${pageOrders.length} itens, hasMore: ${hasMorePages}`);
       }
 
+      console.log(`📄 [PAGINAÇÃO] Tem mais páginas? ${hasMorePages}`);
+      
       currentPage++;
+      pagesFetched++;
+    }
     }
 
     if (pagesFetched > 1) {

@@ -4,7 +4,7 @@
  * Execução: node scripts/test-pagination.js
  */
 
-const BASE_URL = "https://testeaplicativo.econtrole.com/";
+const BASE_URL = "https://testeaplicativo.econtrole.com/api";
 const EMAIL = "motoristaapp@econtrole.com";
 const PASSWORD = "ecomotoapp";
 

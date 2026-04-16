@@ -34,7 +34,8 @@
       "Bash(break)",
       "Bash(})",
       "Bash(rm *)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "WebFetch(testeaplicativo.econtrole.com)"
     ]
   },
   "$version": 3
