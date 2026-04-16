@@ -2,8 +2,38 @@ import axios from "axios";
 import { Platform } from "react-native";
 import { Paths, File } from "expo-file-system";
 import * as Crypto from "expo-crypto";
-import { getCredentials, saveServiceOrderDraft, getServiceOrderDraft, deleteServiceOrderDraft } from "@/databases/database";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCredentials, saveServiceOrderDraft, getServiceOrderDraft, deleteServiceOrderDraft, insertCredentials } from "@/databases/database";
 import { retrieveDomain } from "./retrieveUserSession";
+
+const CREDENTIALS_KEY = "econtrole_credentials";
+
+/**
+ * Atualiza os tokens no cache/storage a partir dos headers de resposta da API
+ * Crucial para o funcionamento do Devise Token Auth (token rotation)
+ */
+async function updateTokensFromResponse(headers: any, currentUid: string) {
+  // O axios retorna os headers em minúsculas
+  const accessToken = headers["access-token"];
+  const client = headers["client"];
+  const uid = headers["uid"] || currentUid;
+
+  if (accessToken && client && uid) {
+    console.log("[TokenSync] 🔄 Atualizando tokens da resposta do CollectionService...");
+    const updatedCreds = { accessToken, client, uid };
+    
+    // Salva em AsyncStorage
+    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+    
+    // Salva em SQLite
+    insertCredentials({
+      _id: 'main',
+      accessToken,
+      uid,
+      client,
+    });
+  }
+}
 
 // Usando o novo API do expo-file-system para obter o diretório de documentos
 const documentDirectory = Paths.document.uri;
@@ -148,6 +178,11 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
       // Garante que o axios não tente transformar o payload
       transformRequest: [(data) => JSON.stringify(data)]
     });
+
+    // ✅ Atualiza tokens se o servidor enviou novos (rotação de tokens)
+    if (response.headers) {
+      await updateTokensFromResponse(response.headers, credentials.uid);
+    }
 
     console.log("\n========== [CollectionService] RESPOSTA DA API ==========");
     await clearDraft(orderId);

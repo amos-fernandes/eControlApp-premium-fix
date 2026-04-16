@@ -186,7 +186,6 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       currentPage++;
       pagesFetched++;
     }
-    }
 
     if (pagesFetched > 1) {
       console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
