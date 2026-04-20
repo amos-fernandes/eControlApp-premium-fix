@@ -28,10 +28,10 @@ const CREDENTIALS_KEY = "econtrole_credentials";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { login, testConnection } = useAuth();
+  const { login, testConnection, baseUrl: contextBaseUrl } = useAuth();
   const [email, setEmail] = useState(DEFAULT_EMAIL);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
-  const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL);
+  const [baseUrl, setBaseUrl] = useState(contextBaseUrl || DEFAULT_BASE_URL);
   const [showPassword, setShowPassword] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +41,13 @@ export default function LoginScreen() {
     ok: boolean;
     message: string;
   } | null>(null);
+
+  // Sincroniza o baseUrl local quando o do contexto muda (ex: via QR Code)
+  React.useEffect(() => {
+    if (contextBaseUrl) {
+      setBaseUrl(contextBaseUrl);
+    }
+  }, [contextBaseUrl]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {

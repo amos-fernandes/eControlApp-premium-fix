@@ -39,10 +39,10 @@ const DEFAULT_BASE_URL = "https://testeaplicativo.econtrole.com";
 
 // Devise Token Auth endpoint variations to try
 const AUTH_PATHS = [
-  "/auth/sign_in",             // eControle Pro standard (URL base já tem /api)
-  "/v1/auth/sign_in",          // REST standard com versão
-  "/api/auth/sign_in",         // Fallback para URLs base sem /api
-  "/api/v1/auth/sign_in",      // Fallback para URLs base sem /api
+  "/api/auth/sign_in",         // Padrão eControle Pro (Recomendado v1.8.1)
+  "/auth/sign_in",             // Fallback se a URL já tiver /api
+  "/api/v1/auth/sign_in",      // REST standard com versão
+  "/v1/auth/sign_in",
   "/users/sign_in",
   "/api/v1/users/sign_in",
 ];
@@ -53,10 +53,6 @@ async function performLogin(
   password: string
 ): Promise<{ accessToken: string; client: string; uid: string }> {
   let cleanBase = baseUrl.replace(/\/$/, "");
-  // Garante que a URL base sempre termine com /api (padrão eControle Pro)
-  if (!cleanBase.endsWith("/api")) {
-    cleanBase = cleanBase + "/api";
-  }
   let lastError: Error | null = null;
 
   for (const path of AUTH_PATHS) {
@@ -210,20 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 🔥 Valida credenciais silenciosamente (GET /auth/validate_token)
-  // Definido antes do loadSession para evitar referência antes da declaração
-  // Versão que aceita parâmetros para não depender do state
   const validateTokenCredentials = useCallback(async (creds: Credentials, url: string): Promise<boolean> => {
-    if (!creds || !url) {
-      console.log("[AuthContext] No credentials or URL to validate");
-      return false;
-    }
+    if (!creds || !url) return false;
 
     try {
       console.log("[AuthContext] 🔍 Validating token with server...");
-      console.log("[AuthContext] URL:", `${url}/auth/validate_token`);
-      console.log("[AuthContext] Token (partial):", creds.accessToken.substring(0, 10) + "...");
-
-      const validateUrl = `${url}/auth/validate_token`;
+      const validateUrl = `${url}/api/auth/validate_token`;
       const headers = {
         "Content-Type": "application/json",
         "access-token": creds.accessToken,
@@ -232,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout
+      const timeout = setTimeout(() => controller.abort(), 5000);
 
       const response = await fetch(validateUrl, {
         method: "GET",
@@ -242,26 +230,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       clearTimeout(timeout);
 
-      console.log("[AuthContext] Validate response status:", response.status);
+      if (response.status === 401) return false;
+      if (!response.ok) return false;
 
-      if (response.status === 401) {
-        console.log("[AuthContext] ❌ Token expired (401)");
-        return false;
-      }
-
-      if (!response.ok) {
-        console.log("[AuthContext] ❌ Validate failed:", response.status);
-        return false;
-      }
-
-      // Token válido - retorna novos headers se vierem
       const newAccessToken = response.headers.get("access-token") || creds.accessToken;
       const newClient = response.headers.get("client") || creds.client;
       const newUid = response.headers.get("uid") || creds.uid;
 
       if (newAccessToken !== creds.accessToken || newClient !== creds.client) {
-        console.log("[AuthContext] 🔄 Token refreshed during validation");
-        // Atualiza as credenciais com novos headers
         creds.accessToken = newAccessToken;
         creds.client = newClient;
         creds.uid = newUid;
@@ -269,11 +245,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return true;
     } catch (error: any) {
-      console.error("[AuthContext] ❌ Token validation error:", error.message);
-      // Se é network error, pode ser que está offline - mantém credenciais
       if (error.name === "AbortError" || error.message?.includes("Network")) {
-        console.warn("[AuthContext] ⚠️ Network error during validation - keeping credentials (offline mode)");
-        return true; // Assume válido se está offline
+        return true; // Assume válido se offline
       }
       return false;
     }
@@ -286,91 +259,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           AsyncStorage.getItem(CREDENTIALS_KEY),
           AsyncStorage.getItem(BASE_URL_KEY),
         ]);
-        console.log("[AuthContext] Loaded storedCreds:", storedCreds ? "EXISTS" : "NULL");
-        console.log("[AuthContext] Loaded storedUrl:", storedUrl);
 
-        // 🔥 CRÍTICO: Guarda credenciais em variável local para validação
         let loadedCreds: Credentials | null = null;
         let loadedUrl: string = DEFAULT_BASE_URL;
 
-        // Tenta primeiro AsyncStorage
         if (storedCreds) {
           try {
             const parsed = JSON.parse(storedCreds);
-            console.log("[AuthContext] Parsed credentials:", {
-              hasToken: !!parsed.accessToken,
-              hasClient: !!parsed.client,
-              hasUid: !!parsed.uid,
-              tokenLength: parsed.accessToken?.length
-            });
-
-            // Valida se tem TODOS os campos necessários
-            if (parsed.accessToken && parsed.accessToken.length > 10 &&
-                parsed.client && parsed.uid) {
-              console.log("[AuthContext] Valid credentials found in AsyncStorage");
+            if (parsed.accessToken && parsed.client && parsed.uid) {
               loadedCreds = parsed;
-            } else {
-              console.log("[AuthContext] Incomplete credentials in AsyncStorage - trying SQLite");
             }
-          } catch (e) {
-            console.log("[AuthContext] Corrupted credentials in AsyncStorage - trying SQLite", e);
-          }
+          } catch (e) {}
         }
 
-        // Fallback: Tenta buscar do SQLite
         if (!loadedCreds) {
           try {
             const { getCredentials } = require("@/databases/database");
             const sqliteCreds = getCredentials();
-            console.log("[AuthContext] SQLite credentials:", sqliteCreds);
-
             if (sqliteCreds && sqliteCreds.accessToken) {
               loadedCreds = {
                 accessToken: sqliteCreds.accessToken,
                 client: sqliteCreds.client || '',
                 uid: sqliteCreds.uid || '',
-                email: undefined,
               };
-              console.log("[AuthContext] ✅ Credenciais carregadas do SQLite");
-              console.log("[AuthContext] 🕐 Token criado em:", sqliteCreds.created_at || "N/A");
             }
-          } catch (e) {
-            console.log("[AuthContext] No credentials in SQLite:", e);
-          }
+          } catch (e) {}
         }
 
-        // Processa URL
         if (storedUrl) {
+          // v1.8.1: NUNCA adicionar /api automaticamente
           loadedUrl = storedUrl.replace(/\/$/, "");
-          if (!loadedUrl.endsWith("/api")) {
-            loadedUrl = loadedUrl + "/api";
-          }
         }
 
         setBaseUrlState(loadedUrl);
         baseUrlRef.current = loadedUrl;
-        await AsyncStorage.setItem(BASE_URL_KEY, loadedUrl);
 
-        // 🔥 VALIDAÇÃO CRÍTICA: Testa se o token ainda está válido
-        // Usa variável local (não depende do state)
         if (loadedCreds) {
-          console.log("[AuthContext] 🔍 Validando token com o servidor...");
           const isValid = await validateTokenCredentials(loadedCreds, loadedUrl);
-
           if (!isValid) {
-            console.warn("[AuthContext] ⚠️ Token EXPIRADO - limpando credenciais e forçando re-login");
-            // NÃO seta credenciais - força re-login
             await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
             try {
               const db = require("@/databases/database").getDB();
               db.runSync('DELETE FROM credentials');
-              console.log("[AuthContext] 🧹 Credenciais SQLite removidas");
-            } catch (e) {
-              console.error("[AuthContext] Error clearing SQLite:", e);
-            }
+            } catch (e) {}
           } else {
-            console.log("[AuthContext] ✅ Token validado com sucesso");
-            setCredentials(loadedCreds); // Só agora seta as credenciais
+            setCredentials(loadedCreds);
           }
         }
       } catch (error) {
@@ -380,37 +313,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     loadSession();
-  }, []);
-
-  // ⏰ Agenda auto-refresh quando credenciais são carregadas
-  useEffect(() => {
-    if (credentials && baseUrl) {
-      console.log("[AuthContext] ⏰ Credentials loaded - scheduling auto-refresh");
-      scheduleAutoRefresh();
-    } else {
-      // Limpa timer se não estiver logado
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-    }
-  }, [credentials, baseUrl, scheduleAutoRefresh]);
+  }, [validateTokenCredentials]);
 
   const setBaseUrl = useCallback(async (url: string) => {
+    // v1.8.1: NUNCA adicionar /api automaticamente
     let clean = url.replace(/\/$/, "");
-    // Garante que a URL base sempre termine com /api (padrão eControle Pro)
-    if (!clean.endsWith("/api")) {
-      clean = clean + "/api";
-    }
     setBaseUrlState(clean);
     baseUrlRef.current = clean;
     await AsyncStorage.setItem(BASE_URL_KEY, clean);
+    console.log("[AuthContext] Base URL updated to:", clean);
   }, []);
 
   const loginWithCredentials = useCallback(async (creds: Credentials) => {
     setCredentials(creds);
     await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
-    // Salva também no SQLite para persistência
     try {
       insertCredentials({
         _id: 'main',
@@ -425,10 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: creds.email.split('@')[0],
         });
       }
-      console.log("[AuthContext] Credentials saved to SQLite");
-    } catch (e) {
-      console.error("[AuthContext] Failed to save credentials to SQLite:", e);
-    }
+    } catch (e) {}
   }, []);
 
   const login = useCallback(
@@ -439,16 +352,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password
       );
       const creds: Credentials = { accessToken, client, uid, email };
-      // Save credentials and base URL atomically
+      let cleanUrl = apiBaseUrl.replace(/\/$/, "");
+      
       await Promise.all([
         AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds)),
-        AsyncStorage.setItem(BASE_URL_KEY, apiBaseUrl.replace(/\/$/, "")),
+        AsyncStorage.setItem(BASE_URL_KEY, cleanUrl),
       ]);
       setCredentials(creds);
-      setBaseUrlState(apiBaseUrl.replace(/\/$/, ""));
-      baseUrlRef.current = apiBaseUrl.replace(/\/$/, "");
+      setBaseUrlState(cleanUrl);
+      baseUrlRef.current = cleanUrl;
       
-      // Salva também no SQLite para persistência
       try {
         insertCredentials({
           _id: 'main',
@@ -461,10 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email,
           name: email.split('@')[0],
         });
-        console.log("[AuthContext] Login successful - credentials saved to SQLite");
-      } catch (e) {
-        console.error("[AuthContext] Failed to save credentials to SQLite:", e);
-      }
+      } catch (e) {}
     },
     []
   );
@@ -472,52 +382,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     setCredentials(null);
     await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
-    
-    // Limpa timer de auto-refresh
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
-      console.log("[AuthContext] 🧹 Auto-refresh timer cleared on logout");
     }
-    
-    // Limpa também do SQLite
     try {
       const db = require("@/databases/database").getDB();
       db.runSync('DELETE FROM credentials');
       db.runSync('DELETE FROM users');
-      console.log("[AuthContext] Credentials cleared from SQLite");
-    } catch (e) {
-      console.error("[AuthContext] Failed to clear credentials from SQLite:", e);
-    }
-    // Keep baseUrl so user doesn't have to re-enter server URL
+    } catch (e) {}
   }, []);
 
   const refreshCredentials = useCallback(async (): Promise<boolean> => {
-    if (!credentials || !baseUrl) {
-      console.log("[AuthContext] Cannot refresh - no credentials or baseUrl");
-      return false;
-    }
+    if (!credentials || !baseUrl) return false;
 
     try {
-      console.log("[AuthContext] Refreshing credentials...");
-      console.log("[AuthContext] Base URL:", baseUrl);
-      console.log("[AuthContext] Token (partial):", credentials.accessToken?.substring(0, 10) + "...");
-
-      // Devise Token Auth: GET /auth/validate_token renova os headers
-      const url = `${baseUrl}/auth/validate_token`;
+      const url = `${baseUrl}/api/auth/validate_token`;
       const headers = {
         "Content-Type": "application/json",
         "access-token": credentials.accessToken,
         client: credentials.client,
         uid: credentials.uid,
       };
-
-      console.log("[AuthContext] Refresh URL:", url);
-      console.log("[AuthContext] Headers:", {
-        "access-token": credentials.accessToken?.substring(0, 10) + "...",
-        client: credentials.client?.substring(0, 10) + "...",
-        uid: credentials.uid?.substring(0, 10) + "..."
-      });
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
@@ -530,32 +416,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       clearTimeout(timeout);
 
-      console.log("[AuthContext] Refresh response status:", response.status);
+      if (response.status === 401) return false;
+      if (!response.ok) return false;
 
-      if (response.status === 401) {
-        console.log("[AuthContext] Refresh failed - token expired (401)");
-        console.warn("[AuthContext] ⚠️  Servidor rejeitou o token. Pode ser necessário fazer login novamente.");
-        return false;
-      }
-
-      if (!response.ok) {
-        console.log("[AuthContext] Refresh failed - status", response.status);
-        const responseText = await response.text().catch(() => "N/A");
-        console.error("[AuthContext] Response body:", responseText.substring(0, 200));
-        return false;
-      }
-
-      // Pega novos headers da resposta
       const newAccessToken = response.headers.get("access-token") || credentials.accessToken;
       const newClient = response.headers.get("client") || credentials.client;
       const newUid = response.headers.get("uid") || credentials.uid;
 
-      // Verifica se os headers vieram vazios
-      if (!newAccessToken || !newClient) {
-        console.warn("[AuthContext] ⚠️  Refresh não retornou novos headers, mantendo atuais");
-      }
-
-      // Atualiza credenciais se vieram novos headers
       const updatedCreds: Credentials = {
         accessToken: newAccessToken,
         client: newClient,
@@ -566,7 +433,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setCredentials(updatedCreds);
       await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
 
-      // Atualiza no SQLite
       insertCredentials({
         _id: 'main',
         accessToken: newAccessToken,
@@ -574,18 +440,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         client: newClient,
       });
 
-      console.log("[AuthContext] ✅ Credentials refreshed successfully");
       return true;
     } catch (error: any) {
-      console.error("[AuthContext] Refresh error:", error.message);
-      if (error.name === "AbortError") {
-        console.error("[AuthContext] Timeout no refresh - servidor não respondeu em 10s");
-      }
       return false;
     }
   }, [credentials, baseUrl]);
 
-  // Atualiza o ref para o auto-refresh usar
   useEffect(() => {
     refreshCredentialsRef.current = refreshCredentials;
   }, [refreshCredentials]);
@@ -596,23 +456,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
-        // Try the health endpoint, or fall back to the auth endpoint (404 = server is alive)
-        const response = await fetch(`${cleanBase}/api/v1/health`, {
+        const response = await fetch(`${cleanBase}/api/auth/sign_in`, {
+          method: "GET", // Just to check if it's alive
           signal: controller.signal,
         });
         clearTimeout(timeout);
-        if (response.ok || response.status === 404 || response.status === 401) {
+        if (response.status === 405 || response.status === 200 || response.status === 401 || response.status === 404) {
           return { ok: true, message: "Servidor acessível ✓" };
         }
-        return {
-          ok: false,
-          message: `Servidor respondeu com erro ${response.status}`,
-        };
+        return { ok: false, message: `Servidor respondeu: ${response.status}` };
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return { ok: false, message: "Timeout — servidor não respondeu" };
-        }
-        return { ok: false, message: `Não foi possível conectar em ${cleanBase}` };
+        return { ok: false, message: "Não foi possível conectar" };
       }
     },
     []

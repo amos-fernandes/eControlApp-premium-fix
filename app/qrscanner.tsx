@@ -324,9 +324,6 @@ export default function QRScannerScreen() {
         console.log("[QRScanner] Building URL:", serverUrl);
         
         let cleanUrl = serverUrl.replace(/\/$/, "");
-        if (!cleanUrl.endsWith("/api")) {
-          cleanUrl = cleanUrl + "/api";
-        }
         
         await setBaseUrl(cleanUrl);
         console.log("[QRScanner] URL set to:", cleanUrl);
