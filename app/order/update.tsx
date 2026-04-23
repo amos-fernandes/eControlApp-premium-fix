@@ -22,6 +22,7 @@ import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import * as CollectionService from "@/services/collectionService";
 import type { ServiceOrder, ServiceExecution } from "@/services/api";
+import { getCurrentPosition } from "@/utils/locationManager";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface ServiceWeight {
@@ -61,6 +62,10 @@ export default function UpdateOrderScreen() {
   const [driverObservations, setDriverObservations] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estados para Validação WhatsApp
+  const [typedValidationCode, setTypedValidationCode] = useState("");
+  const [isValidated, setIsValidated] = useState(false);
   
   // Estados para MTR
   const [isMtrLoading, setIsMtrLoading] = useState(false);
@@ -317,6 +322,50 @@ export default function UpdateOrderScreen() {
     }
   };
 
+  // 🔥 VALIDAÇÃO WHATSAPP
+  useEffect(() => {
+    if (order) {
+      const serverCode = order.contacts?.[0]?.validation_code || (order as any).validation_code;
+      if (serverCode && typedValidationCode === String(serverCode)) {
+        setIsValidated(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setIsValidated(false);
+      }
+    }
+  }, [typedValidationCode, order]);
+
+  const handleSendWhatsApp = () => {
+    if (!order) return;
+    
+    const contact = order.contacts?.[0] || (order as any).contacts?.[0];
+    const phone = contact?.phone || (order as any).customer?.phone || "";
+    const code = contact?.validation_code || (order as any).validation_code;
+    
+    if (!phone) {
+      Alert.alert("Erro", "Telefone de contato não encontrado para esta OS.");
+      return;
+    }
+
+    // Limpa o número (deixa apenas dígitos)
+    const cleanPhone = phone.replace(/\D/g, "");
+    const message = `Olá, seu código de confirmação para a coleta eControle (${order.identifier || order.id}) é: *${code}*`;
+    
+    const url = `whatsapp://send?phone=55${cleanPhone}&text=${encodeURIComponent(message)}`;
+    
+    Linking.canOpenURL(url).then(supported => {
+      if (supported) {
+        Linking.openURL(url);
+      } else {
+        // Fallback para link web se app não instalado
+        const webUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`;
+        Linking.openURL(webUrl);
+      }
+    }).catch(() => {
+      Alert.alert("Erro", "Não foi possível abrir o WhatsApp.");
+    });
+  };
+
   const handleOpenMap = () => {
     if (!order?.address) return;
     const address = order.address;
@@ -461,6 +510,11 @@ export default function UpdateOrderScreen() {
         console.log("[UpdateOrder] ✅ Credenciais renovadas com sucesso");
       }
 
+      // 📍 Captura localização atual do motorista para o momento da coleta
+      console.log("[UpdateOrder] 📍 Capturando localização para o envio...");
+      const position = await getCurrentPosition();
+      console.log("[UpdateOrder] 📍 Localização capturada:", position);
+
       // Prepara os service_executions
       // O endpoint /finish é responsável por mudar o status da OS para "Em Conferência"
       console.log("\n========== [UpdateOrder] PREPARANDO SERVICE EXECUTIONS ==========");
@@ -500,6 +554,10 @@ export default function UpdateOrderScreen() {
         departure_date: departureDate ? departureDate.toISOString() : (departureTime ? new Date().toISOString() : undefined),
         start_km: startKm,
         end_km: endKm,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+        validation_code_used: isValidated,
+        typed_validation_code: typedValidationCode,
         certificate_memo: certificateMemo || undefined,
         driver_observations: driverObservations || undefined,
         collected_equipment: collectedEquipment.filter(eq => eq.selected),
@@ -767,6 +825,49 @@ export default function UpdateOrderScreen() {
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="whatsapp" size={18} color={theme.textSecondary} />
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Validação com Cliente</Text>
+          </View>
+          
+          <View style={styles.validationContainer}>
+            <Pressable 
+              style={[styles.whatsappBtn, { backgroundColor: "#25D366" }]} 
+              onPress={handleSendWhatsApp}
+            >
+              <MaterialCommunityIcons name="whatsapp" size={20} color="#fff" />
+              <Text style={styles.whatsappBtnText}>Enviar Código</Text>
+            </Pressable>
+            
+            <View style={styles.codeInputContainer}>
+              <TextInput
+                style={[
+                  styles.codeInput, 
+                  { 
+                    color: theme.text, 
+                    borderColor: isValidated ? "#25D366" : theme.border,
+                    backgroundColor: theme.surfaceSecondary
+                  }
+                ]}
+                placeholder="Insira o código"
+                value={typedValidationCode}
+                onChangeText={setTypedValidationCode}
+                keyboardType="numeric"
+                maxLength={6}
+              />
+              {isValidated && (
+                <View style={styles.validatedIcon}>
+                  <Ionicons name="checkmark-circle" size={24} color="#25D366" />
+                </View>
+              )}
+            </View>
+          </View>
+          <Text style={[styles.validationHint, { color: theme.textSecondary }]}>
+            A validação não é obrigatória para finalizar, mas recomendada.
+          </Text>
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.sectionHeader}>
             <Feather name="camera" size={18} color={theme.textSecondary} />
             <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Fotos da Coleta (Obrigatório)</Text>
           </View>
@@ -857,6 +958,13 @@ const styles = StyleSheet.create({
   photoActions: { flexDirection: "row", gap: 12, padding: 12 },
   photoActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
   photoActionText: { fontSize: 13, fontWeight: "600" },
+  validationContainer: { flexDirection: "row", gap: 12, padding: 12, alignItems: "center" },
+  whatsappBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12 },
+  whatsappBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  codeInputContainer: { flex: 1, position: "relative" },
+  codeInput: { fontSize: 16, borderWidth: 1, borderRadius: 12, padding: 12, fontWeight: "700", textAlign: "center" },
+  validatedIcon: { position: "absolute", right: -5, top: -5, backgroundColor: "#fff", borderRadius: 12 },
+  validationHint: { fontSize: 11, paddingHorizontal: 12, marginBottom: 12, fontStyle: "italic" },
   photoList: { paddingHorizontal: 12, paddingBottom: 16, gap: 12 },
   photoContainer: { width: 80, height: 80, borderRadius: 12, overflow: "hidden", position: "relative" },
   photoThumb: { width: "100%", height: "100%" },

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, useColorScheme } from 'react-native';
 import MapViewComponent from '@/components/MapViewComponent';
 import { getServiceOrders } from '@/databases/database';
-import { COLORS } from '@/constants/theme';
 import { Colors } from '@/constants/colors';
 import { useIsFocused } from '@react-navigation/native';
 import { getCurrentPosition } from '@/utils/locationManager';

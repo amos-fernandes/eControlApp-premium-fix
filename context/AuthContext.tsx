@@ -16,6 +16,7 @@ export interface Credentials {
   client: string;
   uid: string;
   email?: string;
+  userId?: number;
 }
 
 interface AuthContextValue {
@@ -51,7 +52,7 @@ async function performLogin(
   baseUrl: string,
   email: string,
   password: string
-): Promise<{ accessToken: string; client: string; uid: string }> {
+): Promise<{ accessToken: string; client: string; uid: string; userId?: number }> {
   let cleanBase = baseUrl.replace(/\/$/, "");
   let lastError: Error | null = null;
 
@@ -106,11 +107,15 @@ async function performLogin(
       const uidHeader =
         response.headers.get("uid") || response.headers.get("Uid") || "";
 
+      // 🔥 Captura ID do usuário (vindo do body.data.id ou body.id)
+      const userId = body?.data?.id || body?.id || undefined;
+
       if (accessTokenHeader) {
         return {
           accessToken: accessTokenHeader,
           client: clientHeader,
           uid: uidHeader || email,
+          userId,
         };
       }
 
@@ -346,12 +351,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, apiBaseUrl: string) => {
-      const { accessToken, client, uid } = await performLogin(
+      const { accessToken, client, uid, userId } = await performLogin(
         apiBaseUrl,
         email,
         password
       );
-      const creds: Credentials = { accessToken, client, uid, email };
+      const creds: Credentials = { accessToken, client, uid, email, userId };
       let cleanUrl = apiBaseUrl.replace(/\/$/, "");
       
       await Promise.all([

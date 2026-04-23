@@ -195,9 +195,23 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     }
 
     // Retorna todas as ordens vindas do servidor (sem filtros locais que ocultam dados)
-    const orders = allOrders;
+    let orders = allOrders;
 
-    console.log(`getServicesOrders: Received ${orders.length} orders from server`);
+    // 🔥 FILTRO POR ATOR (USUÁRIO)
+    // Se não for suporte@econtrole.com, filtra pelo ID do usuário
+    if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
+      const loggedUserId = (credentials as any).userId;
+      if (loggedUserId) {
+        console.log(`[ActorFilter] Filtrando OS para o usuário ID: ${loggedUserId}`);
+        orders = allOrders.filter(order => {
+          const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
+          return orderActorId === loggedUserId;
+        });
+        console.log(`[ActorFilter] Exibindo ${orders.length} de ${allOrders.length} ordens.`);
+      }
+    }
+
+    console.log(`getServicesOrders: Received ${orders.length} orders from server (after filtering)`);
 
     // Salva no cache SQLite
     if (orders.length > 0) {
@@ -363,7 +377,11 @@ export const getServiceOrdersFromCache = (): ServiceOrder[] => {
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
@@ -388,7 +406,11 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
@@ -413,7 +435,11 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
@@ -422,6 +448,54 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
   } catch (error) {
     console.error("getServiceOrderFromCacheById: Error:", error);
     return null;
+  }
+};
+
+/**
+ * Sincroniza localizações capturadas do dispositivo com o backend.
+ */
+export const syncDeviceLocations = async (): Promise<void> => {
+  try {
+    const { getUnsyncedLocations, markLocationsAsSynced, clearSyncedLocations } = require("@/databases/database");
+    const locations = getUnsyncedLocations(50); // Lote de 50
+    
+    if (locations.length === 0) return;
+
+    const credentials = await getCredentials();
+    const domainResult = await retrieveDomain();
+
+    if (!credentials || !domainResult.data) return;
+
+    const baseUrl = domainResult.data.replace(/\/$/, "");
+    
+    // Endpoint de tracking do eControle Pro
+    const url = `${baseUrl}/api/device_locations/sync`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "access-token": credentials.accessToken,
+        client: credentials.client,
+        uid: credentials.uid,
+      },
+      body: JSON.stringify({ locations }),
+    });
+
+    if (response.ok) {
+      const ids = locations.map((l: any) => l.id);
+      markLocationsAsSynced(ids);
+      console.log(`[Sync] ${locations.length} localizações sincronizadas.`);
+      
+      // Se sincronizou com sucesso, tenta o próximo lote
+      if (locations.length === 50) {
+        await syncDeviceLocations();
+      } else {
+        clearSyncedLocations();
+      }
+    }
+  } catch (error) {
+    console.error("[Sync] Erro ao sincronizar localizações:", error);
   }
 };
 

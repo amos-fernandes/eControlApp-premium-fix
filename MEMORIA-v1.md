@@ -1213,6 +1213,54 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
+## 🎯 NOVIDADES v1.9.0 (2026-04-23) - Logistics, Actor Filter & WhatsApp ✅💎
+
+### **1. Integração Logística Full & Sync Backend** ✅📍
+- **Problema**: O mapa não exibia as OS por falta de coordenadas no cache e não havia envio de GPS na finalização.
+- **Solução**:
+  - **SQLite**: Adicionadas colunas `latitude` e `longitude` na tabela `service_orders`.
+  - **Captura no Envio**: O app agora captura o `getCurrentPosition()` no exato momento em que o motorista clica em "Enviar Conferência".
+  - **Payload**: Coordenadas incluídas no objeto `updates` enviado para a API.
+  - **Sincronização**: Implementada a função `syncDeviceLocations` que envia lotes de rastreamento pendentes para o backend.
+- **Arquivos**: `databases/database.ts`, `services/servicesOrders.ts`, `app/order/update.tsx`, `utils/locationManager.ts`.
+
+### **2. Filtro por Ator (User Auth ID)** ✅👤
+- **Regra**: O motorista deve ver apenas as ordens de serviço atribuídas a ele.
+- **Implementação**:
+  - **AuthContext**: Captura o `userId` retornado pela API no login e o persiste nas credenciais.
+  - **Lógica de Filtro**: Em `getServicesOrders`, se o usuário não for `suporte@econtrole.com`, o app filtra as OS localmente comparando `order.user_auth.id` com o `loggedUserId`.
+  - **Persistência**: O `user_auth_id` agora é salvo no SQLite para garantir que o filtro funcione mesmo em modo offline.
+- **Arquivos**: `context/AuthContext.tsx`, `services/servicesOrders.ts`, `databases/database.ts`.
+
+### **3. Automação de Validação via WhatsApp** ✅📱
+- **Funcionalidade**: Validação de coleta através de código enviado ao cliente via WhatsApp.
+- **Recursos**:
+  - **Botão WhatsApp**: Abre o app com mensagem automática: *"Olá, seu código de confirmação para a coleta eControle (OS-ID) é: *CÓDIGO*"*.
+  - **Mapeamento**: Extrai o telefone e o `validation_code` dos campos `contacts` (carregados via API).
+  - **Interface**: Novo campo de input para o código com feedback visual (check verde) quando os códigos coincidem.
+  - **Flexibilidade**: A validação é recomendada, mas **não impede** o envio da OS caso o cliente não consiga validar.
+  - **Payload**: Envio do campo `validation_code_used` (boolean) para o backend.
+- **Arquivos**: `app/order/update.tsx`, `databases/database.ts`, `services/api.ts`.
+
+### **4. Refatoração e Estabilidade (PhD)** ✅🔧
+- **TypeScript**: Corrigidos erros de tipagem em `useQueryClient`, interfaces de `ServiceOrder` e escopos de variáveis.
+- **Testes Unitários**: Criado `__tests__/whatsapp.test.ts` para validar a lógica de formatação de URL, incluindo teste com o número do usuário (62981647067).
+- **Logística Tab**: Proteção contra erro de renderização caso a OS não possua coordenadas GPS.
+
+---
+
+## 📊 Resumo da v1.9.x
+
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **GPS no Envio** | v1.9.0 | ✅ | Captura localização no momento da finalização |
+| **Filtro Ator** | v1.9.0 | ✅ | Motorista só vê suas próprias OS (exceto suporte) |
+| **WhatsApp** | v1.9.0 | ✅ | Automação de envio de código e validação na UI |
+| **Sync Backend** | v1.9.0 | ✅ | Sincronização automática de device_locations |
+| **TypeScript** | v1.9.0 | ✅ | 100% tipado e sem erros nos arquivos core |
+
+---
+
 ## 🎯 NOVIDADES v1.8.1 (2026-04-14) - PhD Correção URL Base
 
 ### **CORREÇÃO CRÍTICA: URL Base com /api duplicado** ✅🔧

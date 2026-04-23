@@ -5,6 +5,7 @@ import * as Crypto from "expo-crypto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getCredentials, saveServiceOrderDraft, getServiceOrderDraft, deleteServiceOrderDraft, insertCredentials } from "@/databases/database";
 import { retrieveDomain } from "./retrieveUserSession";
+import { getCurrentPosition } from "@/utils/locationManager";
 
 const CREDENTIALS_KEY = "econtrole_credentials";
 

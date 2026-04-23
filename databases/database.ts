@@ -40,13 +40,27 @@ export const initDatabase = () => {
       customer_id INTEGER,
       customer_name TEXT,
       address_text TEXT,
+      latitude REAL,
+      longitude REAL,
+      user_auth_id INTEGER,
+      validation_code TEXT,
+      contacts_json TEXT,
       observations TEXT,
       driver_observations TEXT,
       created_at TEXT,
       vehicle_info TEXT,
       voyage_info TEXT
     );
+    `);
 
+    // Migrações: Adicionar colunas se não existirem (Código JavaScript fora do SQL)
+    try { db.execSync('ALTER TABLE service_orders ADD COLUMN latitude REAL;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE service_orders ADD COLUMN longitude REAL;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE service_orders ADD COLUMN user_auth_id INTEGER;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE service_orders ADD COLUMN validation_code TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE service_orders ADD COLUMN contacts_json TEXT;'); } catch (e) {}
+
+    db.execSync(`
     CREATE TABLE IF NOT EXISTS service_executions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       service_order_id INTEGER,
@@ -232,8 +246,9 @@ export const insertServiceOrder = (order: any) => {
         db.runSync(
             `INSERT OR REPLACE INTO service_orders (
         id, identifier, status, service_date, customer_id, customer_name,
-        address_text, observations, driver_observations, created_at, vehicle_info, voyage_info
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        address_text, latitude, longitude, user_auth_id, validation_code, contacts_json,
+        observations, driver_observations, created_at, vehicle_info, voyage_info
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 order.id,
                 order.identifier,
@@ -242,6 +257,11 @@ export const insertServiceOrder = (order: any) => {
                 order.customer_id,
                 order.customer?.name,
                 order.address?.to_s || order.address?.name,
+                order.address?.latitude || order.latitude,
+                order.address?.longitude || order.longitude,
+                order.user_auth?.id || order.user_auth_id,
+                order.contacts?.[0]?.validation_code || order.validation_code,
+                order.contacts ? JSON.stringify(order.contacts) : (order.contacts_json || null),
                 order.observations,
                 order.driver_observations,
                 order.created_at,
@@ -279,8 +299,9 @@ export const insertServiceOrderNoTransaction = (order: any, db: any) => {
     db.runSync(
         `INSERT OR REPLACE INTO service_orders (
         id, identifier, status, service_date, customer_id, customer_name,
-        address_text, observations, driver_observations, created_at, vehicle_info, voyage_info
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        address_text, latitude, longitude, user_auth_id, validation_code, contacts_json,
+        observations, driver_observations, created_at, vehicle_info, voyage_info
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             order.id,
             order.identifier,
@@ -289,6 +310,11 @@ export const insertServiceOrderNoTransaction = (order: any, db: any) => {
             order.customer_id,
             order.customer?.name,
             order.address?.to_s || order.address?.name,
+            order.address?.latitude || order.latitude,
+            order.address?.longitude || order.longitude,
+            order.user_auth?.id || order.user_auth_id,
+            order.contacts?.[0]?.validation_code || order.validation_code,
+            order.contacts ? JSON.stringify(order.contacts) : (order.contacts_json || null),
             order.observations,
             order.driver_observations,
             order.created_at,

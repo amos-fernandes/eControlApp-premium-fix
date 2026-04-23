@@ -113,6 +113,10 @@ export const defineLocationTask = () => {
                 })
                 console.log(`[LocationManager] Localização salva: ${latitude}, ${longitude}`)
             })
+
+            // Tenta sincronizar localizações pendentes após salvar novas
+            const { syncDeviceLocations } = require('@/services/servicesOrders')
+            syncDeviceLocations().catch((err: any) => console.error('[LocationManager] Erro no sync:', err))
         }
     })
 }

@@ -39,8 +39,17 @@ export interface ServiceOrder {
   start_km?: string;
   end_km?: string;
   certificate_memo?: string;
-  customer?: { name?: string; document_value?: string };
+  customer?: { name?: string; document_value?: string; phone?: string };
   identifier?: string;
+  user_auth?: { id: number; name?: string };
+  contacts?: Array<{
+    id: number;
+    name: string;
+    phone: string;
+    validation_code: string;
+  }>;
+  validation_code?: string;
+  route?: { id: number; name: string };
 }
 
 export interface Service {

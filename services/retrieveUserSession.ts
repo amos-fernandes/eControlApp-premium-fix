@@ -96,8 +96,9 @@ export const retrieveDomain = async (): Promise<ResponseInterface> => {
 
     // Fallback para AsyncStorage (usado pelo AuthContext)
     let domainData = session;
+    let asyncStorageUrl: string | null = null;
     if (!domainData) {
-      const asyncStorageUrl = await AsyncStorage.getItem("econtrole_base_url")
+      asyncStorageUrl = await AsyncStorage.getItem("econtrole_base_url")
       console.log("retrieveDomain: Fallback to AsyncStorage:", asyncStorageUrl)
       if (asyncStorageUrl) {
         domainData = { domain: asyncStorageUrl }
