@@ -18,11 +18,23 @@
       "bundleIdentifier": "com.econtrole.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Necessário para tirar fotos das ordens de serviço e escanear QR Code",
-        "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria"
+        "NSPhotoLibraryUsageDescription": "Necessário para selecionar fotos da galeria",
+        "NSLocationWhenInUseUsageDescription": "Permitir acesso à sua localização para marcar os pontos de coleta e entrega no mapa.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Permitir acesso constante à sua localização para o rastreamento logístico em tempo real do veículo.",
+        "NSLocationAlwaysUsageDescription": "Permitir acesso à sua localização em segundo plano para rastrear o veículo durante a rota.",
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
       "package": "com.econtrole.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBM5O5enT8wVgVVotuTQfYfAKS2b9yDqGY"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#0D2E1C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -32,7 +44,12 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK"
       ]
     },
     "web": {
@@ -53,6 +70,13 @@
         "expo-camera",
         {
           "cameraPermission": "Permitir uso da câmera para escanear QR Code e fotografar ordens de serviço"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Permitir que o app use sua localização em segundo plano para rastrear a rota do veículo.",
+          "isAndroidBackgroundLocationEnabled": true
         }
       ],
       "@react-native-community/datetimepicker",

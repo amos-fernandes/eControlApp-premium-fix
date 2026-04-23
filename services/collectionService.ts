@@ -114,6 +114,19 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
   // Usando checking: true (booleano) ao invés de status: "checking" (string)
   
   // Backend Rails espera dados aninhados em "service_order"
+  
+  // 🛰️ Captura localização no momento da finalização (Auditoria Logística)
+  console.log("[CollectionService] 🛰️ Capturando localização para auditoria...");
+  let location = null;
+  try {
+    location = await getCurrentPosition();
+    if (location) {
+      console.log(`[CollectionService] ✅ Localização capturada: ${location.latitude}, ${location.longitude}`);
+    }
+  } catch (err) {
+    console.warn("[CollectionService] ⚠️ Falha ao capturar localização para o payload:", err);
+  }
+
   const serviceOrderData = {
     arrival_date: data.arrival_date,
     departure_date: data.departure_date,
@@ -123,6 +136,9 @@ export const finishOrder = async (orderId: string | number, data: CollectionData
     driver_observations: data.driver_observations || "",
     collected_equipment: data.collected_equipment || [],
     lended_equipment: data.lended_equipment || [],
+    // ✅ Campos de localização para o Rails (Auditoria)
+    latitude: location?.latitude,
+    longitude: location?.longitude,
     // ✅ Backend Rails espera "service_executions_attributes" para nested attributes
     service_executions_attributes: data.service_executions_attributes?.map(exec => ({
       id: exec.id,

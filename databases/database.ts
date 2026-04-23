@@ -82,7 +82,66 @@ export const initDatabase = () => {
       draft_data TEXT,
       updated_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS device_locations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      speed REAL,
+      heading REAL,
+      accuracy REAL,
+      timestamp TEXT NOT NULL,
+      synced INTEGER DEFAULT 0,
+      created_at TEXT
+    );
   `)
+}
+
+/**
+ * Insere uma nova localização capturada para rastreamento.
+ */
+export const insertDeviceLocation = (loc: any) => {
+    const db = getDB()
+    db.runSync(
+        `INSERT INTO device_locations (
+      latitude, longitude, speed, heading, accuracy, timestamp, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+            loc.latitude,
+            loc.longitude,
+            loc.speed || 0,
+            loc.heading || 0,
+            loc.accuracy || 0,
+            loc.timestamp || new Date().toISOString(),
+            new Date().toISOString(),
+        ],
+    )
+}
+
+/**
+ * Obtém localizações não sincronizadas.
+ */
+export const getUnsyncedLocations = (limit = 100) => {
+    const db = getDB()
+    return db.getAllSync('SELECT * FROM device_locations WHERE synced = 0 ORDER BY timestamp ASC LIMIT ?', [limit])
+}
+
+/**
+ * Marca localizações como sincronizadas.
+ */
+export const markLocationsAsSynced = (ids: number[]) => {
+    const db = getDB()
+    if (ids.length === 0) return
+    const placeholders = ids.map(() => '?').join(',')
+    db.runSync(`UPDATE device_locations SET synced = 1 WHERE id IN (${placeholders})`, ids)
+}
+
+/**
+ * Limpa localizações antigas (já sincronizadas).
+ */
+export const clearSyncedLocations = () => {
+    const db = getDB()
+    db.runSync('DELETE FROM device_locations WHERE synced = 1')
 }
 
 /**
