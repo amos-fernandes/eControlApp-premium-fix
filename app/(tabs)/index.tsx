@@ -47,10 +47,10 @@ export default function VoyagesScreen() {
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
 
-      // Filtro padrão de 30 dias antes e 7 dias depois (igual à tela principal)
+      // Filtro padrão de 30 dias antes e 7 dias depois (janela maior para testes)
       const now = new Date();
       const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 7);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const sevenDaysAfter = new Date(now);
       sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
 

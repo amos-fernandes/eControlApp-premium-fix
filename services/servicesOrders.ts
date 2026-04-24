@@ -213,12 +213,16 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     }
 
     if (pagesFetched > 1) {
-      console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
+      console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens recebidas.`);
+    } else {
+      console.log(`📄 [PAGINAÇÃO] ✅ Uma única página recebida com ${allOrders.length} ordens.`);
     }
 
-    // 💾 SALVAR NO CACHE SQLITE
-    if (allOrders.length > 0) {
-      console.log(`getServicesOrders: Caching ${allOrders.length} orders to SQLite...`);
+    const totalFromApi = allOrders.length;
+
+    // 💾 SALVAR NO CACHE SQLITE (Salva tudo antes de filtrar, para ter histórico)
+    if (totalFromApi > 0) {
+      console.log(`[Cache] Atualizando ${totalFromApi} ordens no SQLite...`);
       const db = getDB();
       db.withTransactionSync(() => {
         allOrders.forEach((order) => {
@@ -229,74 +233,52 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
           }
         });
       });
-
-      // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA
-      try {
-        const loggedDriverId = credentials.driver_employee_id || credentials.userId || 0;
-        const today = new Date().toISOString().split('T')[0];
-        
-        console.log(`[Logistics] Calculando métricas para motorista ${loggedDriverId}...`);
-        await calculateDailyMetrics(
-          String(loggedDriverId),
-          credentials.email || 'Motorista',
-          today,
-          allOrders
-        );
-        
-        // Consolida o mês atual
-        const month = String(new Date().getMonth() + 1).padStart(2, '0');
-        const year = new Date().getFullYear();
-        await calculateMonthlyMetrics(month, year);
-        
-        console.log("[Logistics] Métricas de desempenho atualizadas.");
-      } catch (logErr) {
-        console.error("[Logistics] Erro ao atualizar métricas:", logErr);
-      }
     }
 
     // 🔥 FILTRO POR ATOR (USUÁRIO)
     let orders = allOrders;
     if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
       const loggedDriverId = credentials.driver_employee_id;
+      const loggedUserId = credentials.userId;
+      
+      console.log(`[FILTER-DEBUG] 🕵️ Iniciando filtragem: LoggedDriverId=${loggedDriverId} | LoggedUserId=${loggedUserId}`);
+
       if (loggedDriverId) {
-        console.log(`[ActorFilter] Filtrando OS para o motorista ID: ${loggedDriverId}`);
-        orders = allOrders.filter(order => order.driver_employee_id === loggedDriverId);
-        console.log(`[ActorFilter] Exibindo ${orders.length} de ${allOrders.length} ordens.`);
-      } else {
-        const loggedUserId = credentials.userId;
-        if (loggedUserId) {
-          console.log(`[ActorFilter] driver_employee_id não encontrado, usando userId: ${loggedUserId}`);
-          orders = allOrders.filter(order => {
-            const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
-            return orderActorId === loggedUserId;
-          });
-        }
+        orders = allOrders.filter(order => String(order.driver_employee_id) === String(loggedDriverId));
+        console.log(`[FILTER-DEBUG] ✅ Filtro por driver_employee_id: restaram ${orders.length} de ${totalFromApi} ordens.`);
+      } else if (loggedUserId) {
+        orders = allOrders.filter(order => {
+          const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
+          return String(orderActorId) === String(loggedUserId);
+        });
+        console.log(`[FILTER-DEBUG] ⚠️ driver_employee_id ausente, filtro por UserId: restaram ${orders.length} de ${totalFromApi} ordens.`);
       }
     }
 
-    // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA (Baseado apenas nas OS do motorista)
+    // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA (Apenas sobre as ordens do motorista)
     if (orders.length > 0) {
       try {
-        const loggedDriverId = credentials.driver_employee_id || credentials.userId || 0;
+        const targetId = credentials.driver_employee_id || credentials.userId || 0;
         const today = new Date().toISOString().split('T')[0];
 
-        console.log(`[Logistics] Calculando métricas de desempenho para motorista ${loggedDriverId}...`);
+        console.log(`[Logistics] Calculando performance para motorista ${targetId}...`);
         await calculateDailyMetrics(
-          String(loggedDriverId),
+          String(targetId),
           credentials.email || 'Motorista',
           today,
-          orders // 👈 Usa as ordens filtradas (o que ele realmente fez)
+          orders
         );
 
-        // Consolida o mês atual
         const month = String(new Date().getMonth() + 1).padStart(2, '0');
         const year = new Date().getFullYear();
         await calculateMonthlyMetrics(month, year);
-
-        console.log("[Logistics] Métricas de desempenho atualizadas com sucesso.");
       } catch (logErr) {
-        console.error("[Logistics] Erro ao atualizar métricas:", logErr);
+        console.error("[Logistics] Erro ao atualizar KPIs:", logErr);
       }
+    }
+
+    if (orders.length === 0 && totalFromApi > 0) {
+      console.warn(`[FILTER-DEBUG] ❌ ATENÇÃO: O servidor mandou ${totalFromApi} ordens, mas NENHUMA bate com seu ID.`);
     }
 
     return orders;
