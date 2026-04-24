@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { ServiceOrderCard } from "@/components/ServiceOrderCard";
+import { LogisticsCard } from "@/components/LogisticsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
@@ -197,6 +198,11 @@ export default function VoyagesScreen() {
               </View>
             </Pressable>
           ))}
+        </View>
+
+        {/* Card de Logística (Acordeão) */}
+        <View style={{ marginTop: 12 }}>
+          <LogisticsCard />
         </View>
       </View>
 

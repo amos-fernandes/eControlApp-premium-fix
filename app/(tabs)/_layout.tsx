@@ -56,6 +56,18 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="log"
+        options={{
+          title: "Log",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="chart.bar.fill" tintColor={color} size={22} />
+            ) : (
+              <Ionicons name="bar-chart-outline" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
         name="logistics"
         options={{
           title: "Mapa",
