@@ -141,7 +141,7 @@ export default function LoginScreen() {
                 resizeMode="cover"
               />
             </View>
-            <Text style={styles.appName}>eControle</Text>
+            <Text style={styles.appName}>eControle ESG</Text>
             <Text style={styles.appSubtitle}>Gestão de Ordens de Serviço</Text>
           </View>
 
