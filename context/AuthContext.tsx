@@ -78,6 +78,16 @@ async function performLogin(
 
       // Parse body for error messages
       const body = await response.json().catch(() => ({}));
+      
+      console.log(`[AuthContext] 🛡️ Resposta de ${url}:`, {
+        status: response.status,
+        headers: {
+          'access-token': response.headers.get('access-token') ? 'PRESENT' : 'MISSING',
+          'client': response.headers.get('client') ? 'PRESENT' : 'MISSING',
+          'uid': response.headers.get('uid') ? 'PRESENT' : 'MISSING',
+        },
+        bodySample: JSON.stringify(body).slice(0, 500)
+      });
 
       if (response.status === 401 || response.status === 422) {
         throw new Error(

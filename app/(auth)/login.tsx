@@ -135,10 +135,10 @@ export default function LoginScreen() {
         >
           <View style={styles.logoArea}>
             <View style={styles.logoContainer}>
-              <Image 
-                source={require('@/assets/images/icon.png')} 
+              <Image
+                source={require('../../assets/images/icon.png')}
                 style={styles.logoImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
             <Text style={styles.appName}>eControle</Text>
@@ -365,35 +365,47 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: "center",
   },
-  logoArea: { alignItems: "center", marginBottom: 32 },
+
+  logoArea: {
+    alignItems: "center",
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
     overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   logoImage: {
-    width: 60,
-    height: 60,
+    width: "100%",
+    height: "100%",
   },
   appName: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: "700",
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.5,
+    textAlign: "center",
   },
   appSubtitle: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 4,
+    fontSize: 15,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 6,
     fontFamily: "Inter_400Regular",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#FFFFFF",
