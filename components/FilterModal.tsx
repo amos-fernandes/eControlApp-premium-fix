@@ -25,8 +25,8 @@ interface FilterModalProps {
 const STATUS_OPTIONS = [
   { label: "Todos", value: "acting"   },
   { label: "Pendente", value: "scheduled" },
-  { label: "Em Conferência", value: "running" },
   { label: "Iniciada", value: "started" },
+  { label: "Em Conferência", value: "running" },
   { label: "Concluída", value: "finished" },
   { label: "Cancelada", value: "canceled" },
 ];
@@ -133,29 +133,26 @@ export function FilterModal({ visible, filters, onApply, onClose }: FilterModalP
   };
 
   const handleReset = () => {
-    // Reset para filtro padrão de 20 dias (igual ao FilterContext)
-    const getDateDaysAgo = (days: number): string => {
+    // Reset para filtro padrão de 30 dias antes e 7 dias depois (igual ao FilterContext)
+    const getDateDaysFromNow = (days: number): string => {
       const date = new Date();
-      date.setDate(date.getDate() - days);
+      date.setDate(date.getDate() + days);
       return date.toISOString().split("T")[0];
-    };
-    const getTodayDate = (): string => {
-      return new Date().toISOString().split("T")[0];
     };
 
     const resetFilters: ServiceOrderFilters = {
       status: "",
       type: "",
       hasVoyage: "",
-      startDate: getDateDaysAgo(20), // Últimos 20 dias (padrão)
-      endDate: getTodayDate(),
+      startDate: getDateDaysFromNow(-7), // 30 dias antes
+      endDate: getDateDaysFromNow(7),    // 7 dias depois
       routeName: "",
       search: "",
     };
-    
+
     console.log("[FilterModal] Limpando filtros:", resetFilters);
     console.log(`[FilterModal] Período resetado: ${resetFilters.startDate} até ${resetFilters.endDate}`);
-    
+
     setLocal(resetFilters);
     onApply(resetFilters);
     onClose();

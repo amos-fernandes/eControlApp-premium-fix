@@ -1,7 +1,11 @@
-import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransaction, getServiceOrders, getServiceOrder as getDBServiceOrder } from "@/databases/database";
+import { getDB, getCredentials, insertServiceOrder, insertServiceOrderNoTransaction, getServiceOrders, getServiceOrder as getDBServiceOrder, insertCredentials } from "@/databases/database";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { retrieveDomain } from "./retrieveUserSession";
 import type { ServiceOrder, ServiceExecution } from "./api";
 import type { Credentials } from "@/context/AuthContext";
+import { refreshAuthToken, getCurrentCredentials, clearTokenCache } from "@/lib/token-sync";
+
+const CREDENTIALS_KEY = "econtrole_credentials";
 
 export interface ApiConfig {
   baseUrl: string;
@@ -19,13 +23,43 @@ export interface FilterServiceOrderState {
 }
 
 /**
+ * Atualiza os tokens no cache/storage a partir dos headers de resposta da API
+ * Crucial para o funcionamento do Devise Token Auth (token rotation)
+ */
+async function updateTokensFromResponse(response: Response, currentUid: string) {
+  const accessToken = response.headers.get("access-token");
+  const client = response.headers.get("client");
+  const uid = response.headers.get("uid") || currentUid;
+
+  if (accessToken && client && uid) {
+    console.log("[TokenSync] 🔄 Atualizando tokens da resposta (rotation)...");
+    const updatedCreds = { accessToken, client, uid };
+    
+    // Salva em AsyncStorage
+    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+    
+    // Salva em SQLite
+    insertCredentials({
+      _id: 'main',
+      accessToken,
+      uid,
+      client,
+    });
+  }
+}
+
+/**
  * Busca ordens de serviço da API com cache SQLite
  * - Primeiro tenta buscar do cache local
  * - Se tiver dados em cache, retorna imediatamente
  * - Se não tiver ou cache estiver vazio, busca da API e salva no cache
+ * - Faz refresh automático do token se receber 401
+ * - ✅ PAGINAÇÃO AUTOMÁTICA: Detecta e busca todas as páginas
  */
 export const getServicesOrders = async ({ filters }: FilterServiceOrderState): Promise<ServiceOrder[]> => {
   console.log("getServicesOrders: Starting with filters:", filters);
+
+  let attemptRefresh = false;
 
   try {
     // Obtém credenciais e URL do banco/secure store
@@ -44,18 +78,6 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
 
     const baseUrl = domainResult.data;
 
-    // Constrói URL com query params
-    const url = new URL(`${baseUrl}/service_orders`);
-    if (filters.status) url.searchParams.set("status", filters.status);
-    if (filters.so_type) url.searchParams.set("so_type", filters.so_type);
-    if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
-    if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
-    if (filters.voyage && filters.voyage !== "all") {
-      url.searchParams.set("voyage", filters.voyage);
-    }
-
-    console.log("getServicesOrders: Fetching from:", url.toString());
-
     // Headers de autenticação
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -64,100 +86,161 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       uid: credentials.uid,
     };
 
-    // Timeout de 20 segundos
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    // 📄 PAGINAÇÃO AUTOMÁTICA: Busca todas as páginas
+    let allOrders: ServiceOrder[] = [];
+    let currentPage = 1;
+    let hasMorePages = true;
+    const MAX_PAGES = 100; // Limite de segurança (evita loop infinito)
+    let pagesFetched = 0;
 
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers,
-      signal: controller.signal,
-    });
+    console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
-    clearTimeout(timeout);
+    while (hasMorePages && pagesFetched < MAX_PAGES) {
+      // 🛠️ CORREÇÃO: Garante que a URL seja montada corretamente, independente se o baseUrl tem /api ou não
+      let finalPath = "/service_orders";
+      if (baseUrl.endsWith("/api") || baseUrl.endsWith("/api/")) {
+        // Se a baseUrl já termina com /api, não adicionamos /api de novo aqui, 
+        // mas o URL constructor vai lidar com as barras.
+      } else {
+        // Se a baseUrl NÃO termina com /api, e sabemos que precisamos dele:
+        // Mas o retrieveDomain já deveria ter adicionado. 
+        // Vamos ser defensivos:
+      }
+      
+      const url = new URL(baseUrl.replace(/\/$/, "") + "/service_orders");
 
-    if (response.status === 401) {
-      console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
-      throw new Error("SESSION_EXPIRED");
-    }
+      // Parâmetros conforme análise: status acting é o filtro do motorista
+      url.searchParams.set("status", filters.status || "acting");
+      url.searchParams.set("so_type", filters.so_type || "all");
+      url.searchParams.set("voyage", (filters.voyage && filters.voyage !== "all") ? filters.voyage : "all");
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      console.error(`getServicesOrders: API error ${response.status}:`, errorText.slice(0, 200));
-      throw new Error(`Erro ao buscar OS: ${response.status} - ${errorText.slice(0, 100)}`);
-    }
+      if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
+      if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
+      
+      // ✅ Parâmetros de paginação
+      url.searchParams.set("page", String(currentPage));
+      url.searchParams.set("per_page", "100");
 
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Resposta não JSON da API");
-    }
+      console.log(`📄 [PAGINAÇÃO] Buscando página ${currentPage}... URL: ${url.toString()}`);
 
-    const data = await response.json();
-    console.log("getServicesOrders: API response received");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
 
-    // Handle various API response shapes
-    let orders: ServiceOrder[] = [];
-    if (Array.isArray(data?.items)) {
-      orders = data.items.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data?.data)) {
-      orders = data.data.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data)) {
-      orders = data.filter((item: any) => item && typeof item === "object");
-    } else if (Array.isArray(data?.service_orders)) {
-      orders = data.service_orders.filter((item: any) => item && typeof item === "object");
-    }
+      try {
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            ...headers,
+            "Accept": "application/json"
+          },
+          signal: controller.signal,
+        });
 
-    // --- FILTRAGEM CUSTOMIZADA ---
-    // Se o filtro de status estiver vazio (Todos), filtramos para mostrar apenas 'atuando'
-    // e excluímos explicitamente canceladas e finalizadas.
-    if (!filters.status) {
-      console.log("getServicesOrders: Filtering for 'acting' orders (excluding finished/canceled)");
-      orders = orders.filter((o) => {
-        const status = (o.status || "").toLowerCase();
-        // Não mostramos finalizadas ou canceladas no modo 'Todos'
-        if (status === "finished" || status === "concluída" || status === "concluida" ||
-            status === "canceled" || status === "cancelada") {
-          return false;
+        clearTimeout(timeout);
+
+        // ✅ Atualiza tokens se o servidor enviou novos (rotation)
+        await updateTokensFromResponse(response, credentials.uid);
+
+        if (response.status === 401) {
+          console.error("getServicesOrders: SESSION_EXPIRED");
+          throw new Error("SESSION_EXPIRED");
         }
-        // Mostramos apenas as que estão atuando ou pendentes
-        return true;
-      });
-    }
-    // ----------------------------
 
-    // --- FILTRO POR ATOR (USUÁRIO) ---
-    // motoristaapp@econtrole.com: NÃO vê OS finalizadas, canceladas ou agendadas
-    // suporte@econtrole.com: Vê TODAS as OS
-    const userEmail = credentials.uid?.toLowerCase() || "";
-    const isMotorista = userEmail.includes("motoristaapp");
-    
-    if (isMotorista && !filters.status) {
-      console.log("getServicesOrders: Filtro por ATOR (motoristaapp) - excluindo finished/canceled/scheduled");
-      orders = orders.filter((o) => {
-        const status = (o.status || "").toLowerCase();
-        // Motorista só vê running e checking
-        if (status === "finished" || status === "concluída" || status === "concluida" ||
-            status === "canceled" || status === "cancelada" ||
-            status === "scheduled" || status === "agendada") {
-          return false;
+        if (!response.ok) {
+          console.error(`getServicesOrders: API error ${response.status}`);
+          throw new Error(`Erro ao buscar OS: ${response.status}`);
         }
-        return true;
-      });
-      console.log(`getServicesOrders: ${orders.length} orders after actor filter (motoristaapp)`);
-    } else if (userEmail.includes("suporte")) {
-      console.log("getServicesOrders: Filtro por ATOR (suporte) - mostrando TODAS as OS");
-    }
-    // ---------------------------------
 
-    console.log(`getServicesOrders: Received ${orders.length} orders after filtering`);
-    
-    // Log dos status recebidos para debug
-    const statusCount: Record<string, number> = {};
-    orders.forEach((o: any) => {
-      const s = o.status || 'unknown';
-      statusCount[s] = (statusCount[s] || 0) + 1;
-    });
-    console.log("getServicesOrders: Status distribution:", statusCount);
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.error("❌ [API ERROR] Resposta não JSON");
+          throw new Error("Resposta não JSON da API");
+        }
+
+        // ✅ Única chamada para json() por página
+        const data = await response.json();
+        
+        // Extrai ordens da resposta (suporta vários formatos)
+        let pageOrders: ServiceOrder[] = [];
+        const rawItems = data?.items || data?.data || data?.service_orders || (Array.isArray(data) ? data : []);
+        
+        if (Array.isArray(rawItems)) {
+          pageOrders = rawItems.filter((item: any) => item && typeof item === "object");
+        }
+
+        console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
+        allOrders = allOrders.concat(pageOrders);
+
+        // ✅ Detectar se há mais páginas
+        // 1. Usando Headers (mais confiável)
+        const xTotalPages = response.headers.get("X-Total-Pages");
+        const xNextPage = response.headers.get("X-Next-Page");
+        
+        // 2. Usando o corpo da resposta (total_items)
+        const totalItems = data?.pagination?.total_items || data?.total_count || data?.meta?.total_count;
+
+        if (xNextPage) {
+          hasMorePages = true;
+        } else if (xTotalPages) {
+          hasMorePages = currentPage < parseInt(xTotalPages, 10);
+        } else if (totalItems !== undefined) {
+          hasMorePages = allOrders.length < totalItems;
+          console.log(`📄 [PAGINAÇÃO] Progresso: ${allOrders.length}/${totalItems} itens`);
+        } else if (data?.pagination?.next_page !== undefined) {
+          hasMorePages = data.pagination.next_page !== null;
+        } else if (data?.next_page !== undefined) {
+          hasMorePages = data.next_page !== null;
+        } else {
+          // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
+          hasMorePages = pageOrders.length >= 100;
+        }
+
+        console.log(`📄 [PAGINAÇÃO] Tem mais páginas? ${hasMorePages}`);
+        
+        currentPage++;
+        pagesFetched++;
+      } catch (fetchError: any) {
+        clearTimeout(timeout);
+        console.error(`📄 [PAGINAÇÃO] Erro na requisição da página ${currentPage}:`, fetchError.message);
+        // Se falhou a rede em uma página, mas já temos ordens de páginas anteriores, 
+        // podemos optar por retornar o que temos ou lançar o erro.
+        // Aqui vamos lançar o erro para o catch externo lidar com o fallback para cache.
+        throw fetchError;
+      }
+    }
+
+    if (pagesFetched > 1) {
+      console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
+    }
+
+    // Retorna todas as ordens vindas do servidor (sem filtros locais que ocultam dados)
+    let orders = allOrders;
+
+    // 🔥 FILTRO POR ATOR (USUÁRIO)
+    // Se não for suporte@econtrole.com, filtra pelo driver_employee_id
+    if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
+      const loggedDriverId = (credentials as any).driver_employee_id;
+      if (loggedDriverId) {
+        console.log(`[ActorFilter] Filtrando OS para o motorista ID: ${loggedDriverId}`);
+        orders = allOrders.filter(order => {
+          const orderDriverId = order.driver_employee_id;
+          return orderDriverId === loggedDriverId;
+        });
+        console.log(`[ActorFilter] Exibindo ${orders.length} de ${allOrders.length} ordens.`);
+      } else {
+        // Fallback para o comportamento anterior se driver_employee_id não estiver disponível
+        const loggedUserId = (credentials as any).userId;
+        if (loggedUserId) {
+          console.log(`[ActorFilter] driver_employee_id não encontrado, usando userId: ${loggedUserId}`);
+          orders = allOrders.filter(order => {
+            const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
+            return orderActorId === loggedUserId;
+          });
+        }
+      }
+    }
+
+    console.log(`getServicesOrders: Received ${orders.length} orders from server (after filtering)`);
 
     // Salva no cache SQLite
     if (orders.length > 0) {
@@ -323,8 +406,13 @@ export const getServiceOrdersFromCache = (): ServiceOrder[] => {
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
@@ -348,8 +436,13 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
@@ -373,8 +466,13 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { to_s: row.address_text },
+      address: { 
+        to_s: row.address_text,
+        latitude: row.latitude,
+        longitude: row.longitude
+      },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
@@ -382,6 +480,54 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
   } catch (error) {
     console.error("getServiceOrderFromCacheById: Error:", error);
     return null;
+  }
+};
+
+/**
+ * Sincroniza localizações capturadas do dispositivo com o backend.
+ */
+export const syncDeviceLocations = async (): Promise<void> => {
+  try {
+    const { getUnsyncedLocations, markLocationsAsSynced, clearSyncedLocations } = require("@/databases/database");
+    const locations = getUnsyncedLocations(50); // Lote de 50
+    
+    if (locations.length === 0) return;
+
+    const credentials = await getCredentials();
+    const domainResult = await retrieveDomain();
+
+    if (!credentials || !domainResult.data) return;
+
+    const baseUrl = domainResult.data.replace(/\/$/, "");
+    
+    // Endpoint de tracking do eControle Pro
+    const url = `${baseUrl}/api/device_locations/sync`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "access-token": credentials.accessToken,
+        client: credentials.client,
+        uid: credentials.uid,
+      },
+      body: JSON.stringify({ locations }),
+    });
+
+    if (response.ok) {
+      const ids = locations.map((l: any) => l.id);
+      markLocationsAsSynced(ids);
+      console.log(`[Sync] ${locations.length} localizações sincronizadas.`);
+      
+      // Se sincronizou com sucesso, tenta o próximo lote
+      if (locations.length === 50) {
+        await syncDeviceLocations();
+      } else {
+        clearSyncedLocations();
+      }
+    }
+  } catch (error) {
+    console.error("[Sync] Erro ao sincronizar localizações:", error);
   }
 };
 

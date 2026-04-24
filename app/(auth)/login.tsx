@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,17 +21,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
-const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
-const DEFAULT_EMAIL = "motoristaapp@econtrole.com";
-const DEFAULT_PASSWORD = "ecomotoapp";
+const DEFAULT_BASE_URL = "";
+const DEFAULT_EMAIL = "";
+const DEFAULT_PASSWORD = "";
 const CREDENTIALS_KEY = "econtrole_credentials";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { login, testConnection } = useAuth();
+  const { login, testConnection, baseUrl: contextBaseUrl } = useAuth();
   const [email, setEmail] = useState(DEFAULT_EMAIL);
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
-  const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL);
+  const [baseUrl, setBaseUrl] = useState(contextBaseUrl || DEFAULT_BASE_URL);
   const [showPassword, setShowPassword] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +41,13 @@ export default function LoginScreen() {
     ok: boolean;
     message: string;
   } | null>(null);
+
+  // Sincroniza o baseUrl local quando o do contexto muda (ex: via QR Code)
+  React.useEffect(() => {
+    if (contextBaseUrl) {
+      setBaseUrl(contextBaseUrl);
+    }
+  }, [contextBaseUrl]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -85,13 +93,13 @@ export default function LoginScreen() {
             try {
               // Limpa AsyncStorage
               await AsyncStorage.multiRemove([CREDENTIALS_KEY]);
-              
+
               // Limpa SQLite
               const { getDB } = require("@/databases/database");
               const db = getDB();
               db.runSync('DELETE FROM credentials');
               db.runSync('DELETE FROM users');
-              
+
               await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               Alert.alert("Sucesso", "Dados limpos! O app será recarregado.", [
                 {
@@ -113,7 +121,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, "#142B1E", "#1B5E35"]}
+      colors={["#088a8f", "#2aadb3"]}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <KeyboardAvoidingView
@@ -127,9 +135,13 @@ export default function LoginScreen() {
         >
           <View style={styles.logoArea}>
             <View style={styles.logoContainer}>
-              <MaterialCommunityIcons name="recycle" size={40} color="#73b275" />
+              <Image
+                source={require('../../assets/images/icon.png')}
+                style={styles.logoImage}
+                resizeMode="cover"
+              />
             </View>
-            <Text style={styles.appName}>eControle</Text>
+            <Text style={styles.appName}>eControle ESG</Text>
             <Text style={styles.appSubtitle}>Gestão de Ordens de Serviço</Text>
           </View>
 
@@ -353,30 +365,47 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: "center",
   },
-  logoArea: { alignItems: "center", marginBottom: 32 },
+
+  logoArea: {
+    alignItems: "center",
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  logoImage: {
+    width: "100%",
+    height: "100%",
   },
   appName: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: "700",
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
     letterSpacing: -0.5,
+    textAlign: "center",
   },
   appSubtitle: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 4,
+    fontSize: 15,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 6,
     fontFamily: "Inter_400Regular",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#FFFFFF",
@@ -421,7 +450,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#4A6357",
+    color: "#088a8f",
     marginBottom: 6,
     fontFamily: "Inter_600SemiBold",
   },

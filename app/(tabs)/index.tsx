@@ -1,295 +1,365 @@
-import { Feather } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   FlatList,
   Platform,
   Pressable,
   RefreshControl,
+  SectionList,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "@/components/EmptyState";
-import { FilterModal } from "@/components/FilterModal";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { ServiceOrderCard } from "@/components/ServiceOrderCard";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { useFilters } from "@/context/FilterContext";
-import { getServicesOrders, getClientName, clearServiceOrdersCache } from "@/services/servicesOrders";
+import {
+  getServicesOrders,
+  getRouteName,
+  getVoyageName,
+  hasVoyage,
+} from "@/services/servicesOrders";
+import { refreshAuthToken } from "@/lib/token-sync";
 import type { ServiceOrder } from "@/services/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-export default function OrdersScreen() {
+type Tab = "com" | "sem";
+
+export default function VoyagesScreen() {
   const insets = useSafeAreaInsets();
-  const { theme, isDark } = useTheme();
-  const { credentials, baseUrl, logout, refreshCredentials } = useAuth();
-  const { filters, setFilter, resetFilters, hasActiveFilters } = useFilters();
-  const [showFilters, setShowFilters] = useState(false);
-  const [localSearch, setLocalSearch] = useState("");
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const { credentials, baseUrl, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<Tab>("com");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [refreshAttempts, setRefreshAttempts] = useState(0);
-  const MAX_REFRESH_ATTEMPTS = 3; // Limite de tentativas de refresh
+  const MAX_REFRESH_ATTEMPTS = 3;
 
-  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ["service_orders", filters, baseUrl],
+  const { data, isLoading, isError, refetch, isRefetching, error } = useQuery({
+    queryKey: ["service_orders_voyages", baseUrl],
     queryFn: async () => {
-      if (!credentials) {
-        console.log("[IndexScreen] ❌ Sem credenciais - não busca OS");
-        throw new Error("Nao autenticado");
-      }
-      console.log("[IndexScreen] 🔑 Buscando OS com credenciais válidas...");
-      try {
-        // Prepara filtros no formato esperado pelo serviço
-        const filterParams = {
-          filters: {
-            status: filters.status || "",
-            so_type: filters.type || "",
-            start_date: filters.startDate || "",
-            end_date: filters.endDate || "",
-            voyage: filters.hasVoyage || "",
-          },
-        };
+      if (!credentials) throw new Error("Não autenticado");
 
-        const orders = await getServicesOrders(filterParams);
-        setDebugInfo(null);
-        return orders;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        const tokenPreview = credentials.accessToken
-          ? credentials.accessToken.slice(0, 20) + "..."
-          : "VAZIO";
-        const detail = `URL: ${baseUrl}\nToken: ${tokenPreview}\nErro: ${msg}`;
-        setDebugInfo(detail);
-        throw err;
-      }
+      // Filtro padrão de 30 dias antes e 7 dias depois (igual à tela principal)
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 7);
+      const sevenDaysAfter = new Date(now);
+      sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
+
+      const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+      const endDate = sevenDaysAfter.toISOString().split('T')[0];
+
+      // Busca OS com filtro de 30 dias antes + 7 dias depois com cache SQLite
+      return getServicesOrders({
+        filters: {
+          status: "",
+          so_type: "",
+          start_date: startDate,
+          end_date: endDate,
+          voyage: "",
+        },
+      });
     },
     enabled: !!credentials,
+    // 💾 Mantém dados por 30 minutos antes de considerar "stale"
+    staleTime: 30 * 60 * 1000, // 30 minutos
+    // 🗑️ Garbage collection após 2 horas
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas
     retry: (failureCount, error) => {
-      // Não retry em caso de sessão expirada
       if (error.message === "SESSION_EXPIRED") return false;
       return failureCount < 2;
     },
   });
 
-  const handleError = useCallback(async () => {
-    if (error instanceof Error && error.message === "SESSION_EXPIRED") {
-      console.log("[IndexScreen] SESSION_EXPIRED - Attempting refresh...");
-      console.log(`[IndexScreen] Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
-
-      // Verifica se excedeu limite de tentativas
-      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-        console.error("[IndexScreen] ❌ Max refresh attempts reached - logging out");
-        await logout();
-        setRefreshAttempts(0); // Reset para próximo login
-        setTimeout(() => {
-          router.replace("/(auth)/login");
-        }, 100);
-        return;
-      }
-
-      // Tenta refresh automático
-      const refreshed = await refreshCredentials();
-
-      if (refreshed) {
-        console.log("[IndexScreen] Refresh successful - retrying request");
-        setRefreshAttempts(0); // Reset após sucesso
-        // Refresh bem-sucedido - tenta recarregar os dados
-        refetch();
-      } else {
-        console.log("[IndexScreen] Refresh failed - logging out");
-        // Refresh falhou - faz logout
-        await logout();
-        setRefreshAttempts(0); // Reset para próximo login
-        setTimeout(() => {
-          router.replace("/(auth)/login");
-        }, 100);
-      }
-    }
-  }, [error, logout, router, refreshCredentials, refetch, refreshAttempts]);
-
-  // Usar useEffect para chamar handleError depois do render
+  // Handle SESSION_EXPIRED com refresh automático
   useEffect(() => {
-    if (isError) {
-      console.log("[IndexScreen] Error detected:", error?.message);
-      handleError();
+    if (isError && error?.message === "SESSION_EXPIRED" && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
+      console.log(`[VoyagesScreen] SESSION_EXPIRED - Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
+      
+      const attemptRefreshAndRetry = async () => {
+        const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/";
+        const refreshed = await refreshAuthToken(baseUrlForRefresh);
+        
+        if (refreshed) {
+          console.log("[VoyagesScreen] ✅ Token refreshed - retrying once");
+          setRefreshAttempts(prev => prev + 1);
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["service_orders_voyages"] });
+          }, 500);
+        } else {
+          console.error("[VoyagesScreen] ❌ Refresh failed - stopping retries");
+          setRefreshAttempts(MAX_REFRESH_ATTEMPTS);
+        }
+      };
+      
+      attemptRefreshAndRetry();
     }
-  }, [isError, error, handleError]);
+  }, [isError, error, refreshAttempts, baseUrl, logout, queryClient]);
 
-  const filtered = (data || []).filter((o: ServiceOrder | null | undefined) => {
-    if (!o) return false; // Filtra valores null/undefined
-    if (filters.hasVoyage === "true" && !o.voyage && !o.voyage_name && !o.voyage_id) return false;
-    if (filters.hasVoyage === "false" && (o.voyage || o.voyage_name || o.voyage_id)) return false;
-    if (localSearch) {
-      const q = localSearch.toLowerCase();
-      const name = getClientName(o).toLowerCase();
-      const id = String(o.id || "");
-      const route = (o.route_name || o.collection_route || "").toLowerCase();
-      if (!name.includes(q) && !id.includes(q) && !route.includes(q)) return false;
-    }
-    return true;
-  });
+  const withVoyage = useMemo(
+    () => (data || []).filter((o: ServiceOrder | null | undefined) => o && hasVoyage(o)),
+    [data]
+  );
+  const withoutVoyage = useMemo(
+    () => (data || []).filter((o: ServiceOrder | null | undefined) => o && !hasVoyage(o)),
+    [data]
+  );
 
+  const voyageSections = useMemo(() => {
+    const groups: Record<string, ServiceOrder[]> = {};
+    withVoyage.forEach((o) => {
+      const name = getVoyageName(o) || "Viagem sem nome";
+      if (!groups[name]) groups[name] = [];
+      groups[name].push(o);
+    });
+    return Object.entries(groups).map(([title, data]) => ({ title, data }));
+  }, [withVoyage]);
+
+  const routeSections = useMemo(() => {
+    const groups: Record<string, ServiceOrder[]> = {};
+    withoutVoyage.forEach((o) => {
+      const name = getRouteName(o);
+      if (!groups[name]) groups[name] = [];
+      groups[name].push(o);
+    });
+    return Object.entries(groups).map(([title, data]) => ({ title, data }));
+  }, [withoutVoyage]);
+
+  const sections = activeTab === "com" ? voyageSections : routeSections;
   const topPadding = Platform.OS === "web" ? 67 : insets.top;
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={[styles.header, { paddingTop: topPadding + 12, backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
-        <View style={styles.headerTop}>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Ordens de Servico</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: topPadding + 12,
+            backgroundColor: theme.surface,
+            borderBottomColor: theme.border,
+          },
+        ]}
+      >
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Viagens</Text>
+        <View style={[styles.tabs, { backgroundColor: theme.border }]}>
+          {(["com", "sem"] as Tab[]).map((t) => (
             <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                clearServiceOrdersCache();
-                refetch();
-              }}
-              style={[styles.filterBtn, { marginRight: 0 }]}
+              key={t}
+              style={[
+                styles.tab,
+                activeTab === t && { backgroundColor: Colors.primary },
+              ]}
+              onPress={() => setActiveTab(t)}
             >
-              <Feather name="refresh-cw" size={16} color={theme.textSecondary} />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === t ? "#fff" : theme.textSecondary },
+                ]}
+              >
+                {t === "com" ? "Com Viagem" : "Sem Viagem"}
+              </Text>
+              <View
+                style={[
+                  styles.tabBadge,
+                  {
+                    backgroundColor:
+                      activeTab === t
+                        ? "rgba(255,255,255,0.25)"
+                        : theme.borderStrong,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tabBadgeText,
+                    { color: activeTab === t ? "#fff" : theme.textMuted },
+                  ]}
+                >
+                  {t === "com" ? withVoyage.length : withoutVoyage.length}
+                </Text>
+              </View>
             </Pressable>
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                logout();
-                router.replace("/(auth)/login");
-              }}
-              style={[styles.filterBtn, { marginRight: 0 }]}
-            >
-              <Feather name="log-out" size={16} color="#EF4444" />
-            </Pressable>
-            <Pressable
-              style={[styles.filterBtn, hasActiveFilters && { backgroundColor: Colors.primary }]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowFilters(true); }}
-            >
-              <Feather name="sliders" size={16} color={hasActiveFilters ? "#fff" : theme.textSecondary} />
-            </Pressable>
-          </View>
+          ))}
         </View>
-
-        <View style={[styles.searchBar, { backgroundColor: isDark ? theme.surfaceSecondary : "#F8FAF9", borderColor: theme.border }]}>
-          <Feather name="search" size={15} color={theme.textMuted} />
-          <TextInput
-            style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Buscar por cliente, OS ou rota..."
-            placeholderTextColor={theme.textMuted}
-            value={localSearch}
-            onChangeText={setLocalSearch}
-          />
-          {localSearch ? (
-            <Pressable onPress={() => setLocalSearch("")}>
-              <Feather name="x-circle" size={15} color={theme.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        {hasActiveFilters ? (
-          <View style={styles.filterPills}>
-            {filters.status ? (
-              <View style={[styles.pill, { backgroundColor: Colors.primary + "20" }]}>
-                <Text style={[styles.pillText, { color: Colors.primary }]}>{filters.status}</Text>
-                <Pressable onPress={() => setFilter("status", "")}><Feather name="x" size={11} color={Colors.primary} /></Pressable>
-              </View>
-            ) : null}
-            {filters.type ? (
-              <View style={[styles.pill, { backgroundColor: Colors.primary + "20" }]}>
-                <Text style={[styles.pillText, { color: Colors.primary }]}>{filters.type}</Text>
-                <Pressable onPress={() => setFilter("type", "")}><Feather name="x" size={11} color={Colors.primary} /></Pressable>
-              </View>
-            ) : null}
-            {filters.hasVoyage ? (
-              <View style={[styles.pill, { backgroundColor: Colors.primary + "20" }]}>
-                <Text style={[styles.pillText, { color: Colors.primary }]}>{filters.hasVoyage === "true" ? "Com Viagem" : "Sem Viagem"}</Text>
-                <Pressable onPress={() => setFilter("hasVoyage", "")}><Feather name="x" size={11} color={Colors.primary} /></Pressable>
-              </View>
-            ) : null}
-            <Pressable onPress={resetFilters}>
-              <Text style={[styles.clearAll, { color: theme.textMuted }]}>Limpar tudo</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </View>
 
       {isLoading ? (
-        <LoadingShimmer count={6} />
+        <LoadingShimmer count={5} />
       ) : isError ? (
-        <View style={styles.errorContainer}>
-          <Feather name="wifi-off" size={40} color="#EF4444" />
-          <Text style={[styles.errorTitle, { color: theme.text }]}>Erro ao carregar ordens</Text>
-
-          {debugInfo ? (
-            <View style={[styles.debugBox, { backgroundColor: isDark ? "#1a0a0a" : "#FEF2F2", borderColor: "#EF4444" }]}>
-              <Text style={[styles.debugTitle, { color: "#EF4444" }]}>Detalhes do erro:</Text>
-              <Text style={[styles.debugText, { color: theme.text }]} selectable>{debugInfo}</Text>
-            </View>
-          ) : null}
-
-          <Pressable style={styles.retryBtn} onPress={() => { setDebugInfo(null); refetch(); }}>
-            <Text style={styles.retryText}>Tentar novamente</Text>
-          </Pressable>
-        </View>
+        <EmptyState icon="wifi-off" title="Erro ao carregar" subtitle="Tente novamente." />
+      ) : sections.length === 0 ? (
+        <EmptyState
+          icon="truck"
+          title={activeTab === "com" ? "Sem viagens" : "Sem ordens sem viagem"}
+          subtitle="Nenhuma ordem encontrada nesta categoria."
+        />
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(o, index) => {
-            // Garante chave única usando identifier ou id como fallback
-            const identifier = o?.identifier || o?.id;
-            return identifier ? String(identifier) : `item-${index}`;
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => String(item.id)}
+          renderSectionHeader={({ section }) => {
+            const isExpanded = expandedGroups.has(section.title);
+            return (
+              <Pressable
+                style={[
+                  styles.sectionHeader,
+                  { backgroundColor: theme.surfaceSecondary, borderColor: theme.border },
+                ]}
+                onPress={() => toggleGroup(section.title)}
+              >
+                <View style={styles.sectionLeft}>
+                  {activeTab === "com" ? (
+                    <MaterialCommunityIcons name="truck-fast" size={16} color={Colors.primary} />
+                  ) : (
+                    <MaterialCommunityIcons name="map-marker-radius" size={16} color="#64748B" />
+                  )}
+                  <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                    {section.title}
+                  </Text>
+                </View>
+                <View style={styles.sectionRight}>
+                  <View style={[styles.countBadge, { backgroundColor: theme.border }]}>
+                    <Text style={[styles.countText, { color: theme.textSecondary }]}>
+                      {section.data.length}
+                    </Text>
+                  </View>
+                  <Feather
+                    name={isExpanded ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={theme.textMuted}
+                  />
+                </View>
+              </Pressable>
+            );
           }}
-          renderItem={({ item }) => (
-            <ServiceOrderCard
-              order={item}
-              onPress={() => router.push({ pathname: "/order/[id]", params: { id: item.identifier || String(item.id) } })}
-            />
-          )}
-          contentContainerStyle={[styles.list, filtered.length === 0 && styles.listEmpty]}
-          refreshControl={<RefreshControl refreshing={!!isRefetching} onRefresh={() => refetch()} tintColor={Colors.primary} />}
-          ListEmptyComponent={
-            <EmptyState
-              icon="clipboard"
-              title="Nenhuma OS encontrada"
-              subtitle={hasActiveFilters || localSearch ? "Tente remover os filtros aplicados." : "Nenhuma ordem de servico disponivel."}
+          renderItem={({ item, section }) => {
+            if (!expandedGroups.has(section.title)) return null;
+            return (
+              <ServiceOrderCard
+                order={item}
+                onPress={() =>
+                  router.push({ pathname: "/order/[id]", params: { id: item.identifier || String(item.id) } })
+                }
+              />
+            );
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={!!isRefetching}
+              onRefresh={() => refetch()}
+              tintColor={Colors.primary}
             />
           }
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
         />
       )}
-
-      <FilterModal
-        visible={showFilters}
-        filters={filters}
-        onApply={(f) => { Object.entries(f).forEach(([k, v]) => setFilter(k as keyof typeof filters, v)); }}
-        onClose={() => setShowFilters(false)}
-      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  headerTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Inter_700Bold" },
-  filterBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  searchBar: { flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, height: 42, gap: 8 },
-  searchInput: { flex: 1, fontSize: 14, fontFamily: "Inter_400Regular" },
-  filterPills: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, alignItems: "center" },
-  pill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  pillText: { fontSize: 12, fontWeight: "600", fontFamily: "Inter_600SemiBold" },
-  clearAll: { fontSize: 12, fontFamily: "Inter_400Regular", textDecorationLine: "underline" },
-  list: { paddingVertical: 8 },
-  listEmpty: { flex: 1 },
-  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
-  errorTitle: { fontSize: 16, fontWeight: "700", fontFamily: "Inter_700Bold", textAlign: "center" },
-  debugBox: { width: "100%", borderWidth: 1, borderRadius: 12, padding: 14, gap: 6 },
-  debugTitle: { fontSize: 13, fontWeight: "700", fontFamily: "Inter_700Bold", marginBottom: 4 },
-  debugText: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 18 },
-  retryBtn: { backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 14, marginTop: 4 },
-  retryText: { color: "#fff", fontWeight: "700", fontFamily: "Inter_700Bold" },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+    marginBottom: 12,
+  },
+  tabs: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 3,
+    gap: 2,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: "600",
+    fontFamily: "Inter_600SemiBold",
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontFamily: "Inter_700Bold",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  sectionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    fontFamily: "Inter_600SemiBold",
+    flex: 1,
+  },
+  sectionRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  countBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countText: {
+    fontSize: 12,
+    fontWeight: "600",
+    fontFamily: "Inter_600SemiBold",
+  },
+  list: { paddingVertical: 8, paddingBottom: 32 },
 });

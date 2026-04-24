@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git show *)",
+      "Bash(npx *)",
+      "Bash(npm ls *)",
+      "Bash(node *)",
+      "Bash(ls *)",
+      "Bash(which *)",
+      "Bash(dpkg *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(cat *)",
+      "Bash(java *)",
+      "Bash(/opt/android-studio/jbr/bin/java *)",
+      "Bash(chmod *)",
+      "Bash(./gradlew *)",
+      "Bash(file *)",
+      "Bash(convert *)",
+      "Bash(mv *)",
+      "Bash(identify *)",
+      "Bash(git add *)",
+      "Bash(eas *)",
+      "Bash(do *)",
+      "Bash(done)",
+      "Bash(git *)",
+      "Bash(uname *)",
+      "Bash(sudo *)",
+      "Bash(echo *)",
+      "Bash(mkdir *)",
+      "Bash(sleep *)",
+      "Bash(tail *)",
+      "Bash(nohup *)",
+      "Bash(break)",
+      "Bash(})",
+      "Bash(rm *)",
+      "Bash(npm test)",
+      "WebFetch(testeaplicativo.econtrole.com)"
+    ]
+  },
+  "$version": 3
+}

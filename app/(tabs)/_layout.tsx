@@ -46,24 +46,36 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Ordens",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="list.bullet.clipboard" tintColor={color} size={22} />
-            ) : (
-              <Ionicons name="list" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="voyages"
-        options={{
           title: "Viagens",
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="car.2" tintColor={color} size={22} />
             ) : (
               <Ionicons name="car-outline" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="logistics"
+        options={{
+          title: "Mapa",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="map" tintColor={color} size={22} />
+            ) : (
+              <Ionicons name="map-outline" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: "Ordens",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="list.bullet.clipboard" tintColor={color} size={22} />
+            ) : (
+              <Ionicons name="list" size={22} color={color} />
             ),
         }}
       />

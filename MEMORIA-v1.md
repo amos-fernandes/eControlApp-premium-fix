@@ -3,10 +3,60 @@
 ## 📋 Visão Geral
 **eControlApp** - Aplicativo React Native para gestão de ordens de serviço da eControle Pro.
 
-**Data**: 2026-03-24 (Última atualização)
+**Data**: 2026-03-29 (Última atualização)
 **Versão Atual**: 1.6.4
-**Status**: ✅ Funcional + Cache SQLite + Status Checking + Upload Fotos + Filtro por Ator
+**Status**: ✅ Funcional + Cache SQLite + Status Checking + Upload Fotos + Filtro por Ator + Amounts Corretos
 **Branch**: `developer`
+
+---
+
+## 🎯 NOVIDADES v1.6.4 (2026-03-29)
+
+### **CORREÇÃO CRÍTICA: Payload service_executions_attributes com dados aninhados** ✅💎
+- **Problema**: `amount` dos serviços estava sendo salvo como 0 (zero) no backend
+- **Sintoma**: OS era enviada para conferência, mas `service_executions.amount = 0`
+- **Investigação**:
+  - App enviava `amount: 3` e `amount: 3000` corretamente
+  - Logs mostravam payload correto no frontend
+  - Backend Rails recebia os dados mas salvava como 0
+- **Causa Raiz**: Backend Rails esperava dados aninhados em `service_order`, não no nível raiz
+- **Solução**:
+  - Payload agora envia dados aninhados em `service_order`
+  - `service_executions_attributes` dentro de `service_order` (nested attributes do Rails)
+  - Formato correto para `accepts_nested_attributes_for` do Rails
+- **Arquivos**: `services/collectionService.ts`, `app/order/update.tsx`
+- **Payload Corrigido**:
+```json
+{
+  "checking": true,
+  "service_order": {
+    "arrival_date": "2026-03-29T14:24:00.000Z",
+    "departure_date": "2026-03-29T15:24:00.000Z",
+    "start_km": "200",
+    "end_km": "230",
+    "driver_observations": "Teste",
+    "collected_equipment": [],
+    "lended_equipment": [],
+    "service_executions_attributes": [
+      {
+        "id": 76473,
+        "service_id": 23,
+        "amount": 3  ✅ VALOR CORRETO!
+      },
+      {
+        "id": 76472,
+        "service_id": 5,
+        "amount": 3000  ✅ VALOR CORRETO!
+      }
+    ]
+  }
+}
+```
+- **Logs de Debug Adicionados**:
+  - `💰💰💰 [UPDATEORDER] PAYLOAD COMPLETO SENDO ENVIADO 💰💰💰`
+  - `💰💰💰 [CollectionService] VERIFICAÇÃO DE AMOUNTS 💰💰💰`
+  - Logs mostram `amount type`, `isNaN`, `=== 0`, `=== null`, `=== undefined`
+- **Status**: ✅ **TESTADO E APROVADO** - OS 35102 com amounts 3 e 3000 salvos corretamente!
 
 ---
 
@@ -1163,6 +1213,122 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
+## 🎯 NOVIDADES v1.9.0 (2026-04-23) - Logistics, Actor Filter & WhatsApp ✅💎
+
+### **1. Integração Logística Full & Sync Backend** ✅📍
+- **Problema**: O mapa não exibia as OS por falta de coordenadas no cache e não havia envio de GPS na finalização.
+- **Solução**:
+  - **SQLite**: Adicionadas colunas `latitude` e `longitude` na tabela `service_orders`.
+  - **Captura no Envio**: O app agora captura o `getCurrentPosition()` no exato momento em que o motorista clica em "Enviar Conferência".
+  - **Payload**: Coordenadas incluídas no objeto `updates` enviado para a API.
+  - **Sincronização**: Implementada a função `syncDeviceLocations` que envia lotes de rastreamento pendentes para o backend.
+- **Arquivos**: `databases/database.ts`, `services/servicesOrders.ts`, `app/order/update.tsx`, `utils/locationManager.ts`.
+
+### **2. Filtro por Ator (User Auth ID)** ✅👤
+- **Regra**: O motorista deve ver apenas as ordens de serviço atribuídas a ele.
+- **Implementação**:
+  - **AuthContext**: Captura o `userId` retornado pela API no login e o persiste nas credenciais.
+  - **Lógica de Filtro**: Em `getServicesOrders`, se o usuário não for `suporte@econtrole.com`, o app filtra as OS localmente comparando `order.user_auth.id` com o `loggedUserId`.
+  - **Persistência**: O `user_auth_id` agora é salvo no SQLite para garantir que o filtro funcione mesmo em modo offline.
+- **Arquivos**: `context/AuthContext.tsx`, `services/servicesOrders.ts`, `databases/database.ts`.
+
+### **3. Automação de Validação via WhatsApp** ✅📱
+- **Funcionalidade**: Validação de coleta através de código enviado ao cliente via WhatsApp.
+- **Recursos**:
+  - **Botão WhatsApp**: Abre o app com mensagem automática: *"Olá, seu código de confirmação para a coleta eControle (OS-ID) é: *CÓDIGO*"*.
+  - **Mapeamento**: Extrai o telefone e o `validation_code` dos campos `contacts` (carregados via API).
+  - **Interface**: Novo campo de input para o código com feedback visual (check verde) quando os códigos coincidem.
+  - **Flexibilidade**: A validação é recomendada, mas **não impede** o envio da OS caso o cliente não consiga validar.
+  - **Payload**: Envio do campo `validation_code_used` (boolean) para o backend.
+- **Arquivos**: `app/order/update.tsx`, `databases/database.ts`, `services/api.ts`.
+
+### **4. Refatoração e Estabilidade (PhD)** ✅🔧
+- **TypeScript**: Corrigidos erros de tipagem em `useQueryClient`, interfaces de `ServiceOrder` e escopos de variáveis.
+- **Testes Unitários**: Criado `__tests__/whatsapp.test.ts` para validar a lógica de formatação de URL, incluindo teste com o número do usuário (62981647067).
+- **Logística Tab**: Proteção contra erro de renderização caso a OS não possua coordenadas GPS.
+
+---
+
+## 📊 Resumo da v1.9.x
+
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **GPS no Envio** | v1.9.0 | ✅ | Captura localização no momento da finalização |
+| **Filtro Ator** | v1.9.0 | ✅ | Motorista só vê suas próprias OS (exceto suporte) |
+| **WhatsApp** | v1.9.0 | ✅ | Automação de envio de código e validação na UI |
+| **Sync Backend** | v1.9.0 | ✅ | Sincronização automática de device_locations |
+| **TypeScript** | v1.9.0 | ✅ | 100% tipado e sem erros nos arquivos core |
+
+---
+
+## 🎯 NOVIDADES v1.8.1 (2026-04-14) - PhD Correção URL Base
+
+### **CORREÇÃO CRÍTICA: URL Base com /api duplicado** ✅🔧
+- **Problema**: App não conectava após login - credenciais não persistiam
+- **Causa Raiz**: Múltiplos arquivos adicionavam `/api` na URL automaticamente
+  - URL salva: `https://testeaplicativo.econtrole.com/api`
+  - AuthContext adicionava `/api` de novo → `https://testeaplicativo.econtrole.com/api/api`
+  - Login falhava silently, credenciais não salvavam
+- **Solução**: Remoção de TODAS as adições automáticas de `/api`
+- **URL Correta**: `https://testeaplicativo.econtrole.com` (SEM /api no final)
+  - Login: `https://testeaplicativo.econtrole.com/api/auth/sign_in` ✅
+  - OS: `https://testeaplicativo.econtrole.com/api/service_orders` ✅
+
+**Arquivos Corrigidos (6):**
+1. `context/AuthContext.tsx` - Removido `if (!cleanBase.endsWith("/api")) cleanBase += "/api"`
+2. `services/retrieveUserSession.ts` - Removida adição em 4 lugares
+3. `services/api.ts` - Removido warning e adição de `/api`
+4. `services/collectionService.ts` - Removido `baseUrl += "/api"`
+5. `app/qrscanner.tsx` - Removido em 2 lugares + DEFAULT_BASE_URL corrigido
+6. `scripts/test-connection.js` - Atualizado para URL correta
+
+**Testes Validados:**
+- ✅ Login: 200 OK
+- ✅ Busca OS: 200 OK (219 OS recebidas)
+- ✅ Validação token: 200 OK
+- ✅ 60/61 testes Jest passando
+
+**Status:** ✅ **TESTADO E APROVADO** - App conecta normalmente agora!
+
+---
+
+## 🎯 NOVIDADES v1.8.0 (2026-04-14) - PhD Paginação Automática
+
+### **CORREÇÃO CRÍTICA: Paginação Automática para Buscar TODAS as OS** ✅📄
+- **Problema**: App trazia apenas primeiras ~100 OS no login, ignorando o resto
+- **Causa**: API é paginada (padrão Rails/Kaminari/WillPaginate), app não buscava páginas seguintes
+- **Solução**: Implementação de paginação automática com detecção inteligente de formato
+- **Arquivo**: `services/servicesOrders.ts`
+
+**Implementação:**
+- Loop automático que busca todas as páginas (máx 100 páginas = 10.000 OS)
+- Detecção automática de 5 formatos de paginação:
+  1. `data.pagination.next_page` (Rails Kaminari)
+  2. `data.next_page` (paginação simples)
+  3. `data.links.next` (JSON:API)
+  4. `data.meta.total_pages` (meta pagination)
+  5. `data.total_pages` (customizado)
+- Fallback: Se recebeu < 100 itens, acabou
+- Parâmetros: `page=N&per_page=100` (máximo razoável por página)
+- Range de datas mantido: -7/+7 dias (requisito preservado)
+
+**Logs de Debug Incluídos:**
+- `📄 [PAGINAÇÃO] Iniciando paginação automática...`
+- `📄 [PAGINAÇÃO] Buscando página N...`
+- `🔍💰🔍 [PAGINAÇÃO] ESTRUTURA COMPLETA DA RESPOSTA 🔍💰🔍`
+- Headers: X-Total, X-Per-Page, X-Page, X-Total-Pages
+- `📄 [PAGINAÇÃO] ✅ Buscadas N páginas, total X ordens`
+
+**Status:** ✅ **IMPLEMENTADO** - Pronto para teste em produção
+
+**Como Testar:**
+1. Login no app
+2. Observar logs no terminal/console
+3. Verificar se traz mais OS que antes
+4. Logs mostrarão quantas páginas foram buscadas
+
+---
+
 ## 🎯 NOVIDADES v1.7.0 (2026-03-18) - PhD Refactor & Persistence
 
 ### **Carga de Dados e Range de Datas** ✅
@@ -1198,3 +1364,49 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 - **Navegabilidade**: Validada carga de **1186 OS** com filtragem de **542 ativas** no ambiente testeaplicativo.
 
 ---
+
+## 📊 Resumo da v1.8.x
+
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **Paginação** | v1.8.0 | ✅ | Busca automática de todas as páginas da API |
+| **Correção URL** | v1.8.1 | ✅ | Remoção de adições automáticas de `/api` |
+| **Range** | - | ✅ | Mantido -7/+7 dias (requisito preservado) |
+| **Testes** | - | ✅ | 60/61 passando, validação manual OK |
+
+**Commits na branch `developer`**:
+```
+[PENDENTE] fix: remover adições automáticas de /api na URL base (v1.8.1)
+[PENDENTE] feat: paginação automática para buscar todas as OS da API (v1.8.0)
+```
+
+---
+
+---
+
+## 🎯 NOVIDADES v1.10.0 (2026-04-24) - Driver Actor Filter ✅💎
+
+### **Filtro por Ator (driver_employee_id)** ✅👤
+- **Regra**: O motorista deve ver apenas as ordens de serviço atribuídas ao seu `driver_employee_id`, e não mais ao `user_auth.id`.
+- **Implementação**:
+  - **SQLite**: Adicionada coluna `driver_employee_id` nas tabelas `service_orders` e `credentials`.
+  - **Migração**: Sistema de migração automática adiciona a coluna se ela não existir.
+  - **AuthContext**: O app agora captura o `driver_employee_id` retornado pelo backend no momento do login e o persiste no SQLite e AsyncStorage.
+  - **Lógica de Filtro**: Em `getServicesOrders`, se o usuário não for `suporte@econtrole.com`, o app filtra as OS localmente comparando `order.driver_employee_id` com o `loggedDriverId`.
+  - **Fallback**: Mantido fallback para `userId` (`user_auth.id`) caso o `driver_employee_id` não esteja disponível na OS ou nas credenciais.
+- **Arquivos**: `context/AuthContext.tsx`, `services/servicesOrders.ts`, `databases/database.ts`, `services/api.ts`.
+
+---
+
+## 📊 Resumo da v1.10.x
+
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **Filtro Motorista** | v1.10.0 | ✅ | Migração de filtro de `user_auth.id` para `driver_employee_id` |
+| **Persistência Auth** | v1.10.0 | ✅ | `driver_employee_id` salvo localmente para uso offline |
+| **Migração SQLite** | v1.10.0 | ✅ | Alteração de esquema automática para novas colunas |
+
+**Última Atualização**: 2026-04-24  
+**Versão**: 1.10.0  
+**Status**: ✅ Desenvolvimento (branch `dev1.1`)  
+

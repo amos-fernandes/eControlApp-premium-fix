@@ -4,7 +4,7 @@ const TEST_CONFIG = {
   baseUrl: 'https://testeaplicativo.econtrole.com/api',
   email: 'motoristaapp@econtrole.com',
   password: 'ecomotoapp',
-  osId: 35075
+  osId: 35102
 };
 
 async function getOSDetails() {
@@ -28,6 +28,7 @@ async function getOSDetails() {
     
     console.log('✅ OS Recuperada!');
     console.log(`🔹 Status: ${os.status}`);
+    console.log(`🔹 OS: ${JSON.stringify(os)}`);
     console.log(`🔹 MTR ID: ${os.mtr_id || 'Não emitido'}`);
     console.log(`🔹 Identifier: ${os.identifier || 'N/A'}`);
     

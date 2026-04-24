@@ -36,7 +36,7 @@ function atobPolyfill(str: string): string {
   }
 }
 
-const DEFAULT_BASE_URL = "https://gsambientais.econtrole.com/api";
+const DEFAULT_BASE_URL = "https://testaplicativo.econtrole.com/api";
 
 // ─── What the QR code can contain ─────────────────────────────────────────────
 type QRResult =
@@ -324,9 +324,6 @@ export default function QRScannerScreen() {
         console.log("[QRScanner] Building URL:", serverUrl);
         
         let cleanUrl = serverUrl.replace(/\/$/, "");
-        if (!cleanUrl.endsWith("/api")) {
-          cleanUrl = cleanUrl + "/api";
-        }
         
         await setBaseUrl(cleanUrl);
         console.log("[QRScanner] URL set to:", cleanUrl);

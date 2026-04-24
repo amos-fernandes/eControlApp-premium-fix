@@ -1,6 +1,6 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Platform,
   Pressable,
@@ -22,30 +22,36 @@ import {
   getRouteName,
   getVoyageName,
 } from "@/services/servicesOrders";
+import { refreshAuthToken } from "@/lib/token-sync";
 import type { ServiceOrder } from "@/services/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function RoutesScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
-  const { credentials, baseUrl } = useAuth();
+  const { credentials, baseUrl, logout } = useAuth();
+  const queryClient = useQueryClient();
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
   const [expandedVoyages, setExpandedVoyages] = useState<Set<string>>(new Set());
+  const [refreshAttempts, setRefreshAttempts] = useState(0);
+  const MAX_REFRESH_ATTEMPTS = 3;
 
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery({
+  const { data, isLoading, isError, refetch, isRefetching, error } = useQuery({
     queryKey: ["service_orders_routes", baseUrl],
     queryFn: async () => {
       if (!credentials) throw new Error("Não autenticado");
 
-      // Filtro padrão de 20 dias (igual à tela principal)
+      // Filtro padrão de 30 dias antes e 7 dias depois (igual à tela principal)
       const now = new Date();
-      const twentyDaysAgo = new Date(now);
-      twentyDaysAgo.setDate(twentyDaysAgo.getDate() - 20);
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 7);
+      const sevenDaysAfter = new Date(now);
+      sevenDaysAfter.setDate(sevenDaysAfter.getDate() + 7);
 
-      const startDate = twentyDaysAgo.toISOString().split('T')[0];
-      const endDate = now.toISOString().split('T')[0];
+      const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+      const endDate = sevenDaysAfter.toISOString().split('T')[0];
 
-      // Busca OS dos últimos 20 dias com cache SQLite
+      // Busca OS com filtro de 30 dias antes + 7 dias depois com cache SQLite
       return getServicesOrders({
         filters: {
           status: "",
@@ -57,11 +63,42 @@ export default function RoutesScreen() {
       });
     },
     enabled: !!credentials,
+    // 💾 Mantém dados por 30 minutos antes de considerar "stale"
+    staleTime: 30 * 60 * 1000, // 30 minutos
+    // 🗑️ Garbage collection após 2 horas
+    gcTime: 2 * 60 * 60 * 1000, // 2 horas
     retry: (failureCount, error) => {
       if (error.message === "SESSION_EXPIRED") return false;
       return failureCount < 2;
     },
   });
+
+  // Handle SESSION_EXPIRED com refresh automático
+  useEffect(() => {
+    if (isError && error?.message === "SESSION_EXPIRED" && refreshAttempts < MAX_REFRESH_ATTEMPTS) {
+      console.log(`[RoutesScreen] SESSION_EXPIRED - Refresh attempt ${refreshAttempts + 1}/${MAX_REFRESH_ATTEMPTS}`);
+      
+      const attemptRefreshAndRetry = async () => {
+        const baseUrlForRefresh = baseUrl || "https://testeaplicativo.econtrole.com/";
+        const refreshed = await refreshAuthToken(baseUrlForRefresh);
+        
+        if (refreshed) {
+          console.log("[RoutesScreen] ✅ Token refreshed - retrying once");
+          setRefreshAttempts(prev => prev + 1);
+          // Aguarda um momento para o cache propagar
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ["service_orders_routes"] });
+          }, 500);
+        } else {
+          console.error("[RoutesScreen] ❌ Refresh failed - stopping retries");
+          setRefreshAttempts(MAX_REFRESH_ATTEMPTS); // Para de tentar
+          // Não faz logout automático - mantém dados em cache visíveis
+        }
+      };
+      
+      attemptRefreshAndRetry();
+    }
+  }, [isError, error, refreshAttempts, baseUrl, logout, queryClient]);
 
   interface VoyageGroup {
     voyageName: string;

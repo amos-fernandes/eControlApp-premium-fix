@@ -1,9 +1,9 @@
-// Verde bem clarinho (como no outro app)
-const primary = "#96cb99";
-const primaryLight = "#81C784";
-const primaryDark = "#388E3C";
-const accent = "#81C784";
-const accentLight = "#A5D6A7";
+// Paleta de cores solicitada pelo usuário (v1.10.0)
+const primary = "#088a8f";
+const primaryLight = "#2aadb3";
+const primaryDark = "#066b6f";
+const accent = "#2aadb3";
+const accentLight = "#e0f2f1";
 
 export const Colors = {
   primary,

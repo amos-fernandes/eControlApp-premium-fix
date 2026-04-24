@@ -14,11 +14,15 @@ import { AuthProvider } from "@/context/AuthContext";
 import { FilterProvider } from "@/context/FilterContext";
 import { queryClient } from "@/lib/query-client";
 import { initDatabase } from "@/databases/database";
+import { defineLocationTask, startBackgroundTracking } from "@/utils/locationManager";
 
 SplashScreen.preventAutoHideAsync();
 
 // Inicializa banco de dados imediatamente
 initDatabase();
+
+// Registra tarefa de localização em segundo plano (obrigatório fora do componente)
+defineLocationTask();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -30,6 +34,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+      // Inicia rastreamento ao carregar o app
+      startBackgroundTracking();
     }
   }, [fontsLoaded]);
 

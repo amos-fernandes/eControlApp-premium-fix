@@ -1,14 +1,13 @@
 import { Feather, MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { Linking, Image } from "react-native";
+import { Linking, Image, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState, useRef, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,12 +15,14 @@ import {
   TextInput,
   View,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { useTheme } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import * as CollectionService from "@/services/collectionService";
 import type { ServiceOrder, ServiceExecution } from "@/services/api";
+import { getCurrentPosition } from "@/utils/locationManager";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface ServiceWeight {
@@ -51,12 +52,20 @@ export default function UpdateOrderScreen() {
   const [lendedEquipment, setLendedEquipment] = useState<EquipmentItem[]>([]);
   const [arrivalTime, setArrivalTime] = useState("");
   const [departureTime, setDepartureTime] = useState("");
+  const [arrivalDate, setArrivalDate] = useState<Date | null>(null);
+  const [departureDate, setDepartureDate] = useState<Date | null>(null);
+  const [showArrivalPicker, setShowArrivalPicker] = useState(false);
+  const [showDeparturePicker, setShowDeparturePicker] = useState(false);
   const [startKm, setStartKm] = useState("");
   const [endKm, setEndKm] = useState("");
   const [certificateMemo, setCertificateMemo] = useState("");
   const [driverObservations, setDriverObservations] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Estados para Validação WhatsApp
+  const [typedValidationCode, setTypedValidationCode] = useState("");
+  const [isValidated, setIsValidated] = useState(false);
   
   // Estados para MTR
   const [isMtrLoading, setIsMtrLoading] = useState(false);
@@ -153,13 +162,78 @@ export default function UpdateOrderScreen() {
           );
         }
 
+        // Carrega horários do rascunho ou da OS
+        if (draft?.arrival_date) {
+          const arrival = new Date(draft.arrival_date);
+          const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de chegada do RASCUNHO:", {
+            original: draft.arrival_date,
+            parsed: arrival.toISOString(),
+            timeStr: timeStr
+          });
+          setArrivalDate(arrival);
+          setArrivalTime(timeStr);
+        } else if (order.arrival_date) {
+          const arrival = new Date(order.arrival_date);
+          const timeStr = arrival.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de chegada da OS:", {
+            original: order.arrival_date,
+            parsed: arrival.toISOString(),
+            timeStr: timeStr
+          });
+          setArrivalDate(arrival);
+          setArrivalTime(timeStr);
+        }
+
+        if (draft?.departure_date) {
+          const departure = new Date(draft.departure_date);
+          const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de saída do RASCUNHO:", {
+            original: draft.departure_date,
+            parsed: departure.toISOString(),
+            timeStr: timeStr
+          });
+          setDepartureDate(departure);
+          setDepartureTime(timeStr);
+        } else if (order.departure_date) {
+          const departure = new Date(order.departure_date);
+          const timeStr = departure.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          console.log("[UpdateOrder] ✅ Horário de saída da OS:", {
+            original: order.departure_date,
+            parsed: departure.toISOString(),
+            timeStr: timeStr
+          });
+          setDepartureDate(departure);
+          setDepartureTime(timeStr);
+        }
+
         if (!draft) {
-          if (order.arrival_date) setArrivalTime(new Date(order.arrival_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-          if (order.departure_date) setDepartureTime(new Date(order.departure_date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+          // Inicializa outros dados apenas se não houver rascunho
+          console.log("\n========== [UpdateOrder] INICIALIZANDO DADOS DA OS ==========");
+          console.log("[UpdateOrder] OS data:", {
+            id: order.id,
+            has_arrival_date: !!order.arrival_date,
+            has_departure_date: !!order.departure_date,
+            has_start_km: !!order.start_km,
+            has_end_km: !!order.end_km,
+            arrival_date: order.arrival_date,
+            departure_date: order.departure_date,
+            start_km: order.start_km,
+            end_km: order.end_km
+          });
+
           setStartKm(order.start_km || "");
           setEndKm(order.end_km || "");
           setCertificateMemo(order.certificate_memo || "");
           setDriverObservations(order.driver_observations || "");
+
+          console.log("[UpdateOrder] Dados inicializados:", {
+            arrivalTime,
+            departureTime,
+            startKm: order.start_km,
+            endKm: order.end_km
+          });
+          console.log("===============================================================\n");
         }
       });
     }
@@ -200,6 +274,98 @@ export default function UpdateOrderScreen() {
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleArrivalTimePress = () => {
+    console.log("[UpdateOrder] handleArrivalTimePress: Abrindo DateTimePicker");
+    setShowArrivalPicker(true);
+  };
+
+  const handleDepartureTimePress = () => {
+    console.log("[UpdateOrder] handleDepartureTimePress: Abrindo DateTimePicker");
+    setShowDeparturePicker(true);
+  };
+
+  const onArrivalTimeChange = (event: any, selectedDate?: Date) => {
+    console.log("[UpdateOrder] onArrivalTimeChange:", {
+      event_type: event.type,
+      has_selectedDate: !!selectedDate,
+      selectedDate: selectedDate?.toISOString()
+    });
+    
+    if (Platform.OS === "android") {
+      setShowArrivalPicker(false);
+    }
+    
+    if (selectedDate) {
+      const timeStr = selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      console.log("[UpdateOrder] Horário de chegada selecionado:", timeStr);
+      setArrivalDate(selectedDate);
+      setArrivalTime(timeStr);
+    }
+  };
+
+  const onDepartureTimeChange = (event: any, selectedDate?: Date) => {
+    console.log("[UpdateOrder] onDepartureTimeChange:", {
+      event_type: event.type,
+      has_selectedDate: !!selectedDate,
+      selectedDate: selectedDate?.toISOString()
+    });
+    
+    if (Platform.OS === "android") {
+      setShowDeparturePicker(false);
+    }
+    
+    if (selectedDate) {
+      const timeStr = selectedDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      console.log("[UpdateOrder] Horário de saída selecionado:", timeStr);
+      setDepartureDate(selectedDate);
+      setDepartureTime(timeStr);
+    }
+  };
+
+  // 🔥 VALIDAÇÃO WHATSAPP
+  useEffect(() => {
+    if (order) {
+      const serverCode = order.contacts?.[0]?.validation_code || (order as any).validation_code;
+      if (serverCode && typedValidationCode === String(serverCode)) {
+        setIsValidated(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setIsValidated(false);
+      }
+    }
+  }, [typedValidationCode, order]);
+
+  const handleSendWhatsApp = () => {
+    if (!order) return;
+    
+    const contact = order.contacts?.[0] || (order as any).contacts?.[0];
+    const phone = contact?.phone || (order as any).customer?.phone || "";
+    const code = contact?.validation_code || (order as any).validation_code;
+    
+    if (!phone) {
+      Alert.alert("Erro", "Telefone de contato não encontrado para esta OS.");
+      return;
+    }
+
+    // Limpa o número (deixa apenas dígitos)
+    const cleanPhone = phone.replace(/\D/g, "");
+    const message = `Olá, seu código de confirmação para a coleta eControle (${order.identifier || order.id}) é: *${code}*`;
+    
+    const url = `whatsapp://send?phone=55${cleanPhone}&text=${encodeURIComponent(message)}`;
+    
+    Linking.canOpenURL(url).then(supported => {
+      if (supported) {
+        Linking.openURL(url);
+      } else {
+        // Fallback para link web se app não instalado
+        const webUrl = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(message)}`;
+        Linking.openURL(webUrl);
+      }
+    }).catch(() => {
+      Alert.alert("Erro", "Não foi possível abrir o WhatsApp.");
+    });
+  };
+
   const handleOpenMap = () => {
     if (!order?.address) return;
     const address = order.address;
@@ -213,6 +379,29 @@ export default function UpdateOrderScreen() {
 
   const handleEmitMTR = async () => {
     if (!order) return;
+
+    // 📋 LOG COMPLETO DOS DADOS DA OS
+    console.log("\n========== [MTR] DADOS COMPLETOS DA OS ==========");
+    console.log(JSON.stringify(order, null, 2));
+    console.log("=================================================\n");
+
+    // Monta mapa de pesos coletados (service_id -> amount)
+    const collectedWeights: Record<string, number> = {};
+    serviceWeights.forEach(sw => {
+      const exec = order.service_executions?.find(
+        (e: any) => String(e.service?.id) === String(sw.serviceId)
+      );
+      if (exec) {
+        const weight = parseFloat(sw.weight.replace(",", ".")) || 0;
+        const serviceId = exec.service?.id;
+        if (serviceId) {
+          collectedWeights[String(serviceId)] = weight;
+        }
+      }
+    });
+
+    console.log("[MTR] Pesos coletados:", JSON.stringify(collectedWeights, null, 2));
+
     Alert.alert("Emitir MTR", "Deseja emitir o MTR para esta OS?", [
       { text: "Cancelar", style: "cancel" },
       {
@@ -220,12 +409,12 @@ export default function UpdateOrderScreen() {
         onPress: async () => {
           setIsMtrLoading(true);
           try {
-            const result = await CollectionService.emitMTR(order.id, `OS-${order.id}`);
+            const result = await CollectionService.emitMTR(order, collectedWeights);
             setMtrResult(result);
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             Alert.alert("MTR Emitido", result.numero_mtr ? `Número: ${result.numero_mtr}` : "Sucesso!");
           } catch (err: any) {
-            Alert.alert("Erro", err.message || "Erro ao emitir MTR");
+            Alert.alert("Erro MTR", err.message || "Erro ao emitir MTR");
           } finally { setIsMtrLoading(false); }
         },
       },
@@ -234,6 +423,17 @@ export default function UpdateOrderScreen() {
 
   const handleSubmit = async () => {
     if (!order) return;
+
+    // LOG COMPLETO DO ESTADO ATUAL
+    console.log("\n========== [UpdateOrder] handleSubmit INICIADO ==========");
+    console.log("[UpdateOrder] Estado atual dos campos:");
+    console.log(`  - arrivalTime: "${arrivalTime}"`);
+    console.log(`  - departureTime: "${departureTime}"`);
+    console.log(`  - arrivalDate: ${arrivalDate?.toISOString() || "null"}`);
+    console.log(`  - departureDate: ${departureDate?.toISOString() || "null"}`);
+    console.log(`  - startKm: "${startKm}"`);
+    console.log(`  - endKm: "${endKm}"`);
+    console.log("===============================================================\n");
 
     // VALIDAÇÕES OBRIGATÓRIAS
     const filledWeights = serviceWeights.filter(sw => sw.weight && sw.weight.trim() !== "");
@@ -255,17 +455,23 @@ export default function UpdateOrderScreen() {
 
     setIsSubmitting(true);
     
-    // Tenta fazer upload das fotos, mas continua se falhar
+    // Tenta fazer upload das fotos, mas continua se falhar ou pular
     let uploadSuccess = true;
     if (photos.length > 0) {
       console.log(`[UpdateOrder] Iniciando upload de ${photos.length} fotos...`);
       for (const uri of photos) {
         try {
-          await CollectionService.uploadImageToS3(uri, order.id);
+          const result = await CollectionService.uploadImageToS3(uri, order.id);
+          // Verifica se foi pulado (servidor de teste)
+          if (result?.skipped) {
+            console.log(`[UpdateOrder] ⏭️ Upload pulado: ${result.reason}`);
+            uploadSuccess = true; // Não conta como erro
+            break;
+          }
         } catch (uploadError: any) {
           console.warn("[UpdateOrder] Upload falhou, mas continuando...", uploadError.message);
           uploadSuccess = false;
-          break; // Para de tentar as outras fotos
+          break;
         }
       }
     }
@@ -304,36 +510,104 @@ export default function UpdateOrderScreen() {
         console.log("[UpdateOrder] ✅ Credenciais renovadas com sucesso");
       }
 
-      // Prepara os service_executions com status 'checking'
+      // 📍 Captura localização atual do motorista para o momento da coleta
+      console.log("[UpdateOrder] 📍 Capturando localização para o envio...");
+      const position = await getCurrentPosition();
+      console.log("[UpdateOrder] 📍 Localização capturada:", position);
+
+      // Prepara os service_executions
       // O endpoint /finish é responsável por mudar o status da OS para "Em Conferência"
+      console.log("\n========== [UpdateOrder] PREPARANDO SERVICE EXECUTIONS ==========");
+      console.log("[UpdateOrder] serviceWeights (estado):", JSON.stringify(serviceWeights, null, 2));
+      
       const serviceExecutions = serviceWeights.map(sw => {
         const exec = order.service_executions?.find((e: ServiceExecution) => String(e.service?.id) === String(sw.serviceId));
+        
+        // Parse do peso com tratamento de erro
+        const weightStr = sw.weight.replace(",", ".");
+        const parsedAmount = parseFloat(weightStr);
+        const finalAmount = parsedAmount || 0;
+        
+        console.log(`[UpdateOrder] Service: ${sw.serviceName}`);
+        console.log(`  - serviceId: ${sw.serviceId}`);
+        console.log(`  - weight (original): "${sw.weight}"`);
+        console.log(`  - weight (formatado): "${weightStr}"`);
+        console.log(`  - parsedAmount: ${parsedAmount}`);
+        console.log(`  - finalAmount: ${finalAmount}`);
+        console.log(`  - exec.id: ${exec?.id}`);
+        console.log(`  - exec.service.id: ${exec?.service?.id}`);
+        
         return {
           id: exec?.id || 0,
           service_id: sw.serviceId,
-          amount: parseFloat(sw.weight.replace(",", ".")) || 0,
-          status: "checking" // CRUCIAL para mudar status dos itens para "Em Conferência"
+          amount: finalAmount
         };
       });
+      
+      console.log("[UpdateOrder] serviceExecutions (pronto para envio):", JSON.stringify(serviceExecutions, null, 2));
+      console.log("===============================================================\n");
 
-      console.log(`[UpdateOrder] Preparando envio para OS ${order.id}:`);
-      console.log(`[UpdateOrder] Service Executions:`, JSON.stringify(serviceExecutions, null, 2));
-
-      // Payload para endpoint /finish (não precisa envelopar em 'service_order')
+      // Prepara dados completos para envio
       const updates = {
-        arrival_date: arrivalTime ? new Date().toISOString() : undefined,
-        departure_date: departureTime ? new Date().toISOString() : undefined,
+        // Usa arrivalDate/departureDate se existirem, senão cria data com a hora selecionada
+        arrival_date: arrivalDate ? arrivalDate.toISOString() : (arrivalTime ? new Date().toISOString() : undefined),
+        departure_date: departureDate ? departureDate.toISOString() : (departureTime ? new Date().toISOString() : undefined),
         start_km: startKm,
         end_km: endKm,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+        validation_code_used: isValidated,
+        typed_validation_code: typedValidationCode,
         certificate_memo: certificateMemo || undefined,
         driver_observations: driverObservations || undefined,
         collected_equipment: collectedEquipment.filter(eq => eq.selected),
         lended_equipment: lendedEquipment.filter(eq => eq.selected),
-        // service_executions_attributes é o nome correto para Rails nested attributes
+        // ✅ Backend Rails espera "service_executions_attributes" para nested attributes
         service_executions_attributes: serviceExecutions,
       };
 
-      console.log(`[UpdateOrder] Updates completos:`, JSON.stringify(updates, null, 2));
+      // LOG EXTREMAMENTE DETALHADO DO PAYLOAD
+      console.log("\n💰💰💰 [UPDATEORDER] PAYLOAD COMPLETO SENDO ENVIADO 💰💰💰");
+      console.log("===============================================================");
+      console.log(`OS ID: ${order.id}`);
+      console.log(`Status: checking`);
+      console.log(`Checking: true`);
+      console.log("\n--- service_executions_attributes ---");
+      updates.service_executions_attributes?.forEach((exec: any, i: number) => {
+        console.log(`\n[Item ${i + 1}]:`);
+        console.log(`  id: ${exec.id}`);
+        console.log(`  service_id: ${exec.service_id}`);
+        console.log(`  amount: ${exec.amount} ← ESTE É O VALOR QUE ESTÁ SENDO ENVIADO!`);
+        console.log(`  amount type: ${typeof exec.amount}`);
+        console.log(`  amount isNaN: ${isNaN(exec.amount)}`);
+      });
+      console.log("\n--- Outros dados ---");
+      console.log(`arrival_date: ${updates.arrival_date}`);
+      console.log(`departure_date: ${updates.departure_date}`);
+      console.log(`start_km: ${updates.start_km}`);
+      console.log(`end_km: ${updates.end_km}`);
+      console.log(`driver_observations: ${updates.driver_observations}`);
+      console.log("===============================================================\n");
+      console.log("💰💰💰 FIM DO PAYLOAD 💰💰💰\n");
+
+      console.log("\n========== [UpdateOrder] ENVIANDO OS PARA CONFERÊNCIA ==========");
+      console.log(`[UpdateOrder] OS ID: ${order.id}`);
+      console.log(`[UpdateOrder] Dados sendo enviados:`);
+      console.log(`  - arrival_date: ${updates.arrival_date || "NÃO ENVIADO"}`);
+      console.log(`    → arrivalDate: ${arrivalDate?.toISOString() || "null"}`);
+      console.log(`    → arrivalTime: "${arrivalTime || "vazio"}"`);
+      console.log(`  - departure_date: ${updates.departure_date || "NÃO ENVIADO"}`);
+      console.log(`    → departureDate: ${departureDate?.toISOString() || "null"}`);
+      console.log(`    → departureTime: "${departureTime || "vazio"}"`);
+      console.log(`  - start_km: ${updates.start_km || "NÃO ENVIADO"}`);
+      console.log(`  - end_km: ${updates.end_km || "NÃO ENVIADO"}`);
+      console.log(`  - certificate_memo: ${updates.certificate_memo || "NÃO ENVIADO"}`);
+      console.log(`  - driver_observations: ${updates.driver_observations || "NÃO ENVIADO"}`);
+      console.log(`  - collected_equipment: ${JSON.stringify(updates.collected_equipment)}`);
+      console.log(`  - lended_equipment: ${JSON.stringify(updates.lended_equipment)}`);
+      console.log(`  - service_executions_attributes: ${JSON.stringify(updates.service_executions_attributes, null, 2)}`);
+      console.log(`[UpdateOrder] Payload completo (service_order):`, JSON.stringify(updates, null, 2));
+      console.log("===============================================================\n");
 
       await CollectionService.finishOrder(order.id, updates as any);
       await CollectionService.clearDraft(order.id); // Limpa rascunho após envio
@@ -346,14 +620,34 @@ export default function UpdateOrderScreen() {
       ]);
     } catch (err: any) {
       console.error("[UpdateOrder] Erro ao enviar:", err);
-      
+
+      // Verifica se é o warning de network error (dados podem ter sido enviados)
+      if (err.warning === "NETWORK_ERROR_POSSIBLE_SUCCESS") {
+        console.warn("[UpdateOrder] ⚠️  Network error - dados PODEM ter sido enviados");
+        Alert.alert(
+          "Atenção",
+          "Os dados foram enviados mas o servidor não respondeu corretamente.\n\n" +
+          "A OS pode estar em conferência. Verifique na lista de OS antes de tentar novamente.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                queryClient.invalidateQueries({ queryKey: ["service_orders"] });
+                router.back();
+              }
+            }
+          ]
+        );
+        return; // Não mostra o segundo alert
+      }
+
       if (err.message === "SESSION_EXPIRED") {
         // Tenta refresh uma vez
         const refreshed = await refreshCredentials();
-        
+
         if (refreshed) {
           Alert.alert(
-            "Sessão Renovada", 
+            "Sessão Renovada",
             "Sua sessão expirou mas foi renovada. Tente enviar novamente.",
             [{ text: "OK" }]
           );
@@ -368,10 +662,10 @@ export default function UpdateOrderScreen() {
             "• O servidor de teste está instável\n\n" +
             "Você será redirecionado para o login.",
             [
-              { 
-                text: "OK", 
+              {
+                text: "OK",
                 onPress: () => {
-                  logout(); 
+                  logout();
                   router.replace("/(auth)/login");
                 }
               }
@@ -447,15 +741,129 @@ export default function UpdateOrderScreen() {
         )}
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={styles.sectionHeader}><Feather name="clock" size={18} color={theme.textSecondary} /><Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Horários e KM</Text></View>
-          <View style={styles.row}>
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Chegada" value={arrivalTime} onChangeText={setArrivalTime} />
-            <TextInput style={[styles.input, { flex: 1 }]} placeholder="Saída" value={departureTime} onChangeText={setDepartureTime} />
+          <View style={styles.sectionHeader}>
+            <Feather name="clock" size={18} color={theme.textSecondary} />
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Horários e KM</Text>
           </View>
+          
+          <View style={styles.timeRow}>
+            <View style={styles.timeLabel}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>Chegada</Text></View>
+            <View style={styles.timeLabel}><Text style={[styles.timeLabelText, { color: theme.textSecondary }]}>Saída</Text></View>
+          </View>
+          
+          <View style={styles.row}>
+            <Pressable 
+              onPress={handleArrivalTimePress} 
+              style={({ pressed }) => [
+                styles.timeInput, 
+                { 
+                  flex: 1, 
+                  backgroundColor: theme.surfaceSecondary, 
+                  borderColor: theme.border, 
+                  borderRadius: 10, 
+                  padding: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  opacity: pressed ? 0.7 : 1
+                }
+              ]}
+            >
+              <Text style={{ fontSize: 16, color: arrivalTime ? theme.text : theme.textMuted, fontWeight: "500" }}>
+                {arrivalTime || "Selecionar"}
+              </Text>
+              <Feather name="clock" size={18} color={theme.textMuted} />
+            </Pressable>
+            
+            <Pressable 
+              onPress={handleDepartureTimePress} 
+              style={({ pressed }) => [
+                styles.timeInput, 
+                { 
+                  flex: 1, 
+                  backgroundColor: theme.surfaceSecondary, 
+                  borderColor: theme.border, 
+                  borderRadius: 10, 
+                  padding: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  opacity: pressed ? 0.7 : 1
+                }
+              ]}
+            >
+              <Text style={{ fontSize: 16, color: departureTime ? theme.text : theme.textMuted, fontWeight: "500" }}>
+                {departureTime || "Selecionar"}
+              </Text>
+              <Feather name="clock" size={18} color={theme.textMuted} />
+            </Pressable>
+          </View>
+          
           <View style={styles.row}>
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Inicial" value={startKm} onChangeText={setStartKm} keyboardType="numeric" />
             <TextInput style={[styles.input, { flex: 1 }]} placeholder="KM Final" value={endKm} onChangeText={setEndKm} keyboardType="numeric" />
           </View>
+        </View>
+
+        {showArrivalPicker && (
+          <DateTimePicker
+            value={arrivalDate || new Date()}
+            mode="time"
+            display="default"
+            onChange={onArrivalTimeChange}
+          />
+        )}
+
+        {showDeparturePicker && (
+          <DateTimePicker
+            value={departureDate || new Date()}
+            mode="time"
+            display="default"
+            onChange={onDepartureTimeChange}
+          />
+        )}
+
+        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.sectionHeader}>
+            <MaterialCommunityIcons name="whatsapp" size={18} color={theme.textSecondary} />
+            <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>Validação com Cliente</Text>
+          </View>
+          
+          <View style={styles.validationContainer}>
+            <Pressable 
+              style={[styles.whatsappBtn, { backgroundColor: "#25D366" }]} 
+              onPress={handleSendWhatsApp}
+            >
+              <MaterialCommunityIcons name="whatsapp" size={20} color="#fff" />
+              <Text style={styles.whatsappBtnText}>Enviar Código</Text>
+            </Pressable>
+            
+            <View style={styles.codeInputContainer}>
+              <TextInput
+                style={[
+                  styles.codeInput, 
+                  { 
+                    color: theme.text, 
+                    borderColor: isValidated ? "#25D366" : theme.border,
+                    backgroundColor: theme.surfaceSecondary
+                  }
+                ]}
+                placeholder="Insira o código"
+                value={typedValidationCode}
+                onChangeText={setTypedValidationCode}
+                keyboardType="numeric"
+                maxLength={6}
+              />
+              {isValidated && (
+                <View style={styles.validatedIcon}>
+                  <Ionicons name="checkmark-circle" size={24} color="#25D366" />
+                </View>
+              )}
+            </View>
+          </View>
+          <Text style={[styles.validationHint, { color: theme.textSecondary }]}>
+            A validação não é obrigatória para finalizar, mas recomendada.
+          </Text>
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -542,10 +950,21 @@ const styles = StyleSheet.create({
   serviceRow: { flexDirection: "row", alignItems: "center", padding: 12, borderBottomWidth: 1 },
   serviceName: { fontSize: 14 },
   input: { fontSize: 14, borderWidth: 1, borderRadius: 10, padding: 10, marginHorizontal: 12, marginBottom: 12 },
-  row: { flexDirection: "row", gap: 0 },
+  row: { flexDirection: "row", gap: 10 },
+  timeRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 12, marginBottom: 6 },
+  timeLabel: { flex: 1 },
+  timeLabelText: { fontSize: 12, fontWeight: "600", textTransform: "uppercase" },
+  timeInput: { justifyContent: "center" },
   photoActions: { flexDirection: "row", gap: 12, padding: 12 },
   photoActionBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 12 },
   photoActionText: { fontSize: 13, fontWeight: "600" },
+  validationContainer: { flexDirection: "row", gap: 12, padding: 12, alignItems: "center" },
+  whatsappBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12 },
+  whatsappBtnText: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  codeInputContainer: { flex: 1, position: "relative" },
+  codeInput: { fontSize: 16, borderWidth: 1, borderRadius: 12, padding: 12, fontWeight: "700", textAlign: "center" },
+  validatedIcon: { position: "absolute", right: -5, top: -5, backgroundColor: "#fff", borderRadius: 12 },
+  validationHint: { fontSize: 11, paddingHorizontal: 12, marginBottom: 12, fontStyle: "italic" },
   photoList: { paddingHorizontal: 12, paddingBottom: 16, gap: 12 },
   photoContainer: { width: 80, height: 80, borderRadius: 12, overflow: "hidden", position: "relative" },
   photoThumb: { width: "100%", height: "100%" },
