@@ -42,6 +42,7 @@ export interface ServiceOrder {
   customer?: { name?: string; document_value?: string; phone?: string };
   identifier?: string;
   user_auth?: { id: number; name?: string };
+  driver_employee_id?: number;
   contacts?: Array<{
     id: number;
     name: string;

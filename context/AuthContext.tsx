@@ -17,6 +17,7 @@ export interface Credentials {
   uid: string;
   email?: string;
   userId?: number;
+  driver_employee_id?: number;
 }
 
 interface AuthContextValue {
@@ -52,7 +53,7 @@ async function performLogin(
   baseUrl: string,
   email: string,
   password: string
-): Promise<{ accessToken: string; client: string; uid: string; userId?: number }> {
+): Promise<{ accessToken: string; client: string; uid: string; userId?: number; driver_employee_id?: number }> {
   let cleanBase = baseUrl.replace(/\/$/, "");
   let lastError: Error | null = null;
 
@@ -109,6 +110,7 @@ async function performLogin(
 
       // 🔥 Captura ID do usuário (vindo do body.data.id ou body.id)
       const userId = body?.data?.id || body?.id || undefined;
+      const driver_employee_id = body?.data?.driver_employee_id || body?.driver_employee_id || undefined;
 
       if (accessTokenHeader) {
         return {
@@ -116,6 +118,7 @@ async function performLogin(
           client: clientHeader,
           uid: uidHeader || email,
           userId,
+          driver_employee_id,
         };
       }
 
@@ -286,6 +289,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 accessToken: sqliteCreds.accessToken,
                 client: sqliteCreds.client || '',
                 uid: sqliteCreds.uid || '',
+                userId: sqliteCreds.userId,
+                driver_employee_id: sqliteCreds.driver_employee_id,
               };
             }
           } catch (e) {}
@@ -338,6 +343,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accessToken: creds.accessToken,
         uid: creds.uid,
         client: creds.client,
+        userId: creds.userId,
+        driver_employee_id: creds.driver_employee_id,
       });
       if (creds.email) {
         insertUser({
@@ -351,12 +358,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string, apiBaseUrl: string) => {
-      const { accessToken, client, uid, userId } = await performLogin(
+      const { accessToken, client, uid, userId, driver_employee_id } = await performLogin(
         apiBaseUrl,
         email,
         password
       );
-      const creds: Credentials = { accessToken, client, uid, email, userId };
+      const creds: Credentials = { accessToken, client, uid, email, userId, driver_employee_id };
       let cleanUrl = apiBaseUrl.replace(/\/$/, "");
       
       await Promise.all([
@@ -373,6 +380,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           accessToken,
           uid: uid || email,
           client,
+          userId,
+          driver_employee_id,
         });
         insertUser({
           _id: uid || email,

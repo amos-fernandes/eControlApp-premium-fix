@@ -1382,9 +1382,31 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
-**Última Atualização**: 2026-04-14
-**Versão**: 1.8.1
-**Status**: ✅ Desenvolvimento (branch `developer`)
-**Próximo Release**: v1.8.1 (merge para master após testes)
+---
+
+## 🎯 NOVIDADES v1.10.0 (2026-04-24) - Driver Actor Filter ✅💎
+
+### **Filtro por Ator (driver_employee_id)** ✅👤
+- **Regra**: O motorista deve ver apenas as ordens de serviço atribuídas ao seu `driver_employee_id`, e não mais ao `user_auth.id`.
+- **Implementação**:
+  - **SQLite**: Adicionada coluna `driver_employee_id` nas tabelas `service_orders` e `credentials`.
+  - **Migração**: Sistema de migração automática adiciona a coluna se ela não existir.
+  - **AuthContext**: O app agora captura o `driver_employee_id` retornado pelo backend no momento do login e o persiste no SQLite e AsyncStorage.
+  - **Lógica de Filtro**: Em `getServicesOrders`, se o usuário não for `suporte@econtrole.com`, o app filtra as OS localmente comparando `order.driver_employee_id` com o `loggedDriverId`.
+  - **Fallback**: Mantido fallback para `userId` (`user_auth.id`) caso o `driver_employee_id` não esteja disponível na OS ou nas credenciais.
+- **Arquivos**: `context/AuthContext.tsx`, `services/servicesOrders.ts`, `databases/database.ts`, `services/api.ts`.
 
 ---
+
+## 📊 Resumo da v1.10.x
+
+| Feature | Versão | Status | Descrição |
+|---------|--------|--------|-----------|
+| **Filtro Motorista** | v1.10.0 | ✅ | Migração de filtro de `user_auth.id` para `driver_employee_id` |
+| **Persistência Auth** | v1.10.0 | ✅ | `driver_employee_id` salvo localmente para uso offline |
+| **Migração SQLite** | v1.10.0 | ✅ | Alteração de esquema automática para novas colunas |
+
+**Última Atualização**: 2026-04-24  
+**Versão**: 1.10.0  
+**Status**: ✅ Desenvolvimento (branch `dev1.1`)  
+

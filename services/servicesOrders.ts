@@ -96,8 +96,18 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
     while (hasMorePages && pagesFetched < MAX_PAGES) {
-      // 🛠️ CORREÇÃO: Usamos o endpoint padrão da API /api/service_orders
-      const url = new URL(`${baseUrl}/service_orders`);
+      // 🛠️ CORREÇÃO: Garante que a URL seja montada corretamente, independente se o baseUrl tem /api ou não
+      let finalPath = "/service_orders";
+      if (baseUrl.endsWith("/api") || baseUrl.endsWith("/api/")) {
+        // Se a baseUrl já termina com /api, não adicionamos /api de novo aqui, 
+        // mas o URL constructor vai lidar com as barras.
+      } else {
+        // Se a baseUrl NÃO termina com /api, e sabemos que precisamos dele:
+        // Mas o retrieveDomain já deveria ter adicionado. 
+        // Vamos ser defensivos:
+      }
+      
+      const url = new URL(baseUrl.replace(/\/$/, "") + "/service_orders");
 
       // Parâmetros conforme análise: status acting é o filtro do motorista
       url.searchParams.set("status", filters.status || "acting");
@@ -116,78 +126,87 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20000);
 
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          ...headers,
-          "Accept": "application/json"
-        },
-        signal: controller.signal,
-      });
+      try {
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            ...headers,
+            "Accept": "application/json"
+          },
+          signal: controller.signal,
+        });
 
-      clearTimeout(timeout);
+        clearTimeout(timeout);
 
-      // ✅ Atualiza tokens se o servidor enviou novos (rotation)
-      await updateTokensFromResponse(response, credentials.uid);
+        // ✅ Atualiza tokens se o servidor enviou novos (rotation)
+        await updateTokensFromResponse(response, credentials.uid);
 
-      if (response.status === 401) {
-        console.error("getServicesOrders: SESSION_EXPIRED");
-        throw new Error("SESSION_EXPIRED");
+        if (response.status === 401) {
+          console.error("getServicesOrders: SESSION_EXPIRED");
+          throw new Error("SESSION_EXPIRED");
+        }
+
+        if (!response.ok) {
+          console.error(`getServicesOrders: API error ${response.status}`);
+          throw new Error(`Erro ao buscar OS: ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.error("❌ [API ERROR] Resposta não JSON");
+          throw new Error("Resposta não JSON da API");
+        }
+
+        // ✅ Única chamada para json() por página
+        const data = await response.json();
+        
+        // Extrai ordens da resposta (suporta vários formatos)
+        let pageOrders: ServiceOrder[] = [];
+        const rawItems = data?.items || data?.data || data?.service_orders || (Array.isArray(data) ? data : []);
+        
+        if (Array.isArray(rawItems)) {
+          pageOrders = rawItems.filter((item: any) => item && typeof item === "object");
+        }
+
+        console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
+        allOrders = allOrders.concat(pageOrders);
+
+        // ✅ Detectar se há mais páginas
+        // 1. Usando Headers (mais confiável)
+        const xTotalPages = response.headers.get("X-Total-Pages");
+        const xNextPage = response.headers.get("X-Next-Page");
+        
+        // 2. Usando o corpo da resposta (total_items)
+        const totalItems = data?.pagination?.total_items || data?.total_count || data?.meta?.total_count;
+
+        if (xNextPage) {
+          hasMorePages = true;
+        } else if (xTotalPages) {
+          hasMorePages = currentPage < parseInt(xTotalPages, 10);
+        } else if (totalItems !== undefined) {
+          hasMorePages = allOrders.length < totalItems;
+          console.log(`📄 [PAGINAÇÃO] Progresso: ${allOrders.length}/${totalItems} itens`);
+        } else if (data?.pagination?.next_page !== undefined) {
+          hasMorePages = data.pagination.next_page !== null;
+        } else if (data?.next_page !== undefined) {
+          hasMorePages = data.next_page !== null;
+        } else {
+          // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
+          hasMorePages = pageOrders.length >= 100;
+        }
+
+        console.log(`📄 [PAGINAÇÃO] Tem mais páginas? ${hasMorePages}`);
+        
+        currentPage++;
+        pagesFetched++;
+      } catch (fetchError: any) {
+        clearTimeout(timeout);
+        console.error(`📄 [PAGINAÇÃO] Erro na requisição da página ${currentPage}:`, fetchError.message);
+        // Se falhou a rede em uma página, mas já temos ordens de páginas anteriores, 
+        // podemos optar por retornar o que temos ou lançar o erro.
+        // Aqui vamos lançar o erro para o catch externo lidar com o fallback para cache.
+        throw fetchError;
       }
-
-      if (!response.ok) {
-        console.error(`getServicesOrders: API error ${response.status}`);
-        throw new Error(`Erro ao buscar OS: ${response.status}`);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        console.error("❌ [API ERROR] Resposta não JSON");
-        throw new Error("Resposta não JSON da API");
-      }
-
-      // ✅ Única chamada para json() por página
-      const data = await response.json();
-      
-      // Extrai ordens da resposta (suporta vários formatos)
-      let pageOrders: ServiceOrder[] = [];
-      const rawItems = data?.items || data?.data || data?.service_orders || (Array.isArray(data) ? data : []);
-      
-      if (Array.isArray(rawItems)) {
-        pageOrders = rawItems.filter((item: any) => item && typeof item === "object");
-      }
-
-      console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
-      allOrders = allOrders.concat(pageOrders);
-
-      // ✅ Detectar se há mais páginas
-      // 1. Usando Headers (mais confiável)
-      const xTotalPages = response.headers.get("X-Total-Pages");
-      const xNextPage = response.headers.get("X-Next-Page");
-      
-      // 2. Usando o corpo da resposta (total_items)
-      const totalItems = data?.pagination?.total_items || data?.total_count || data?.meta?.total_count;
-
-      if (xNextPage) {
-        hasMorePages = true;
-      } else if (xTotalPages) {
-        hasMorePages = currentPage < parseInt(xTotalPages, 10);
-      } else if (totalItems !== undefined) {
-        hasMorePages = allOrders.length < totalItems;
-        console.log(`📄 [PAGINAÇÃO] Progresso: ${allOrders.length}/${totalItems} itens`);
-      } else if (data?.pagination?.next_page !== undefined) {
-        hasMorePages = data.pagination.next_page !== null;
-      } else if (data?.next_page !== undefined) {
-        hasMorePages = data.next_page !== null;
-      } else {
-        // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
-        hasMorePages = pageOrders.length >= 100;
-      }
-
-      console.log(`📄 [PAGINAÇÃO] Tem mais páginas? ${hasMorePages}`);
-      
-      currentPage++;
-      pagesFetched++;
     }
 
     if (pagesFetched > 1) {
@@ -198,16 +217,26 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     let orders = allOrders;
 
     // 🔥 FILTRO POR ATOR (USUÁRIO)
-    // Se não for suporte@econtrole.com, filtra pelo ID do usuário
+    // Se não for suporte@econtrole.com, filtra pelo driver_employee_id
     if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
-      const loggedUserId = (credentials as any).userId;
-      if (loggedUserId) {
-        console.log(`[ActorFilter] Filtrando OS para o usuário ID: ${loggedUserId}`);
+      const loggedDriverId = (credentials as any).driver_employee_id;
+      if (loggedDriverId) {
+        console.log(`[ActorFilter] Filtrando OS para o motorista ID: ${loggedDriverId}`);
         orders = allOrders.filter(order => {
-          const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
-          return orderActorId === loggedUserId;
+          const orderDriverId = order.driver_employee_id;
+          return orderDriverId === loggedDriverId;
         });
         console.log(`[ActorFilter] Exibindo ${orders.length} de ${allOrders.length} ordens.`);
+      } else {
+        // Fallback para o comportamento anterior se driver_employee_id não estiver disponível
+        const loggedUserId = (credentials as any).userId;
+        if (loggedUserId) {
+          console.log(`[ActorFilter] driver_employee_id não encontrado, usando userId: ${loggedUserId}`);
+          orders = allOrders.filter(order => {
+            const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
+            return orderActorId === loggedUserId;
+          });
+        }
       }
     }
 
@@ -383,6 +412,7 @@ export const getServiceOrdersFromCache = (): ServiceOrder[] => {
         longitude: row.longitude
       },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
@@ -412,6 +442,7 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
         longitude: row.longitude
       },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
@@ -441,6 +472,7 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
         longitude: row.longitude
       },
       driver_observations: row.driver_observations,
+      driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
       voyage: row.voyage_info ? JSON.parse(row.voyage_info) : null,
       service_executions: getServiceExecutionsFromCache(row.id),
