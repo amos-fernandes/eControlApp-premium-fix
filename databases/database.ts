@@ -288,6 +288,13 @@ export const getServiceOrderImages = (serviceOrderId: number) => {
  * Insere ou atualiza as credenciais de autenticacao.
  */
 export const insertCredentials = (cred: any) => {
+    console.log('[SQLITE-DEBUG] 💾 Salvando credenciais:', JSON.stringify({
+        uid: cred.uid,
+        userId: cred.userId,
+        driver_employee_id: cred.driver_employee_id,
+        hasToken: !!cred.accessToken
+    }, null, 2));
+    
     const db = getDB()
     db.runSync(
         'INSERT OR REPLACE INTO credentials (_id, accessToken, uid, client, userId, driver_employee_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',

@@ -4,6 +4,7 @@ import { retrieveDomain } from "./retrieveUserSession";
 import type { ServiceOrder, ServiceExecution } from "./api";
 import type { Credentials } from "@/context/AuthContext";
 import { refreshAuthToken, getCurrentCredentials, clearTokenCache } from "@/lib/token-sync";
+import { calculateDailyMetrics, calculateMonthlyMetrics } from "./logisticsMetrics";
 
 const CREDENTIALS_KEY = "econtrole_credentials";
 
@@ -33,18 +34,33 @@ async function updateTokensFromResponse(response: Response, currentUid: string) 
 
   if (accessToken && client && uid) {
     console.log("[TokenSync] 🔄 Atualizando tokens da resposta (rotation)...");
-    const updatedCreds = { accessToken, client, uid };
     
-    // Salva em AsyncStorage
-    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
-    
-    // Salva em SQLite
-    insertCredentials({
-      _id: 'main',
-      accessToken,
-      uid,
-      client,
-    });
+    try {
+      const stored = await AsyncStorage.getItem(CREDENTIALS_KEY);
+      const creds = stored ? JSON.parse(stored) : {};
+      
+      const updatedCreds = { 
+        ...creds,
+        accessToken, 
+        client, 
+        uid 
+      };
+      
+      // Salva em AsyncStorage
+      await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(updatedCreds));
+      
+      // Salva em SQLite
+      insertCredentials({
+        _id: 'main',
+        accessToken,
+        uid,
+        client,
+        userId: creds.userId,
+        driver_employee_id: creds.driver_employee_id
+      });
+    } catch (e) {
+      console.error("[TokenSync] Erro ao rotacionar tokens:", e);
+    }
   }
 }
 
@@ -57,9 +73,7 @@ async function updateTokensFromResponse(response: Response, currentUid: string) 
  * - ✅ PAGINAÇÃO AUTOMÁTICA: Detecta e busca todas as páginas
  */
 export const getServicesOrders = async ({ filters }: FilterServiceOrderState): Promise<ServiceOrder[]> => {
-  console.log("getServicesOrders: Starting with filters:", filters);
-
-  let attemptRefresh = false;
+  console.log("getServicesOrders: Starting with filters:", JSON.stringify(filters));
 
   try {
     // Obtém credenciais e URL do banco/secure store
@@ -71,6 +85,10 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       throw new Error("NO_CREDENTIALS");
     }
 
+    // Log para debug de token enviado
+    const tokenPreview = credentials.accessToken ? `${credentials.accessToken.substring(0, 12)}...` : "VAZIO";
+    console.log(`[getServicesOrders] 🚀 Enviando Requisição: Token: ${tokenPreview} | UID: ${credentials.uid} | Client: ${credentials.client}`);
+
     if (!domainResult.data || domainResult.status !== 200) {
       console.warn("getServicesOrders: No domain found");
       throw new Error("NO_DOMAIN");
@@ -81,10 +99,18 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     // Headers de autenticação
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "Accept": "application/json",
       "access-token": credentials.accessToken,
       client: credentials.client,
       uid: credentials.uid,
     };
+
+    console.log(`[OS-DEBUG] 📡 Preparando chamada para a API:`);
+    console.log(`[OS-DEBUG] BaseURL: ${baseUrl}`);
+    console.log(`[OS-DEBUG] Headers Enviados:`, JSON.stringify({
+      ...headers,
+      "access-token": credentials.accessToken ? `${credentials.accessToken.substring(0, 10)}...` : "NULO"
+    }, null, 2));
 
     // 📄 PAGINAÇÃO AUTOMÁTICA: Busca todas as páginas
     let allOrders: ServiceOrder[] = [];
@@ -96,17 +122,6 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
     while (hasMorePages && pagesFetched < MAX_PAGES) {
-      // 🛠️ CORREÇÃO: Garante que a URL seja montada corretamente, independente se o baseUrl tem /api ou não
-      let finalPath = "/service_orders";
-      if (baseUrl.endsWith("/api") || baseUrl.endsWith("/api/")) {
-        // Se a baseUrl já termina com /api, não adicionamos /api de novo aqui, 
-        // mas o URL constructor vai lidar com as barras.
-      } else {
-        // Se a baseUrl NÃO termina com /api, e sabemos que precisamos dele:
-        // Mas o retrieveDomain já deveria ter adicionado. 
-        // Vamos ser defensivos:
-      }
-      
       const url = new URL(baseUrl.replace(/\/$/, "") + "/service_orders");
 
       // Parâmetros conforme análise: status acting é o filtro do motorista
@@ -129,10 +144,7 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       try {
         const response = await fetch(url.toString(), {
           method: "GET",
-          headers: {
-            ...headers,
-            "Accept": "application/json"
-          },
+          headers,
           signal: controller.signal,
         });
 
@@ -141,8 +153,16 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
         // ✅ Atualiza tokens se o servidor enviou novos (rotation)
         await updateTokensFromResponse(response, credentials.uid);
 
+        // 🔍 LOG DE RESPOSTA POR PÁGINA
+        const respHeaders: Record<string, string> = {};
+        response.headers.forEach((v, k) => respHeaders[k] = v);
+        
+        console.log(`[OS-DEBUG] 📥 Resposta Página ${currentPage}:`);
+        console.log(`[OS-DEBUG] Status: ${response.status}`);
+        console.log(`[OS-DEBUG] Headers de Resposta:`, JSON.stringify(respHeaders, null, 2));
+
         if (response.status === 401) {
-          console.error("getServicesOrders: SESSION_EXPIRED");
+          console.error("getServicesOrders: SESSION_EXPIRED (Token Inválido)");
           throw new Error("SESSION_EXPIRED");
         }
 
@@ -172,39 +192,22 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
         allOrders = allOrders.concat(pageOrders);
 
         // ✅ Detectar se há mais páginas
-        // 1. Usando Headers (mais confiável)
         const xTotalPages = response.headers.get("X-Total-Pages");
         const xNextPage = response.headers.get("X-Next-Page");
         
-        // 2. Usando o corpo da resposta (total_items)
-        const totalItems = data?.pagination?.total_items || data?.total_count || data?.meta?.total_count;
-
         if (xNextPage) {
           hasMorePages = true;
         } else if (xTotalPages) {
           hasMorePages = currentPage < parseInt(xTotalPages, 10);
-        } else if (totalItems !== undefined) {
-          hasMorePages = allOrders.length < totalItems;
-          console.log(`📄 [PAGINAÇÃO] Progresso: ${allOrders.length}/${totalItems} itens`);
-        } else if (data?.pagination?.next_page !== undefined) {
-          hasMorePages = data.pagination.next_page !== null;
-        } else if (data?.next_page !== undefined) {
-          hasMorePages = data.next_page !== null;
         } else {
-          // Fallback: se a página veio cheia (100 itens), assume que pode ter mais
           hasMorePages = pageOrders.length >= 100;
         }
-
-        console.log(`📄 [PAGINAÇÃO] Tem mais páginas? ${hasMorePages}`);
         
         currentPage++;
         pagesFetched++;
       } catch (fetchError: any) {
         clearTimeout(timeout);
         console.error(`📄 [PAGINAÇÃO] Erro na requisição da página ${currentPage}:`, fetchError.message);
-        // Se falhou a rede em uma página, mas já temos ordens de páginas anteriores, 
-        // podemos optar por retornar o que temos ou lançar o erro.
-        // Aqui vamos lançar o erro para o catch externo lidar com o fallback para cache.
         throw fetchError;
       }
     }
@@ -213,23 +216,54 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens`);
     }
 
-    // Retorna todas as ordens vindas do servidor (sem filtros locais que ocultam dados)
-    let orders = allOrders;
+    // 💾 SALVAR NO CACHE SQLITE
+    if (allOrders.length > 0) {
+      console.log(`getServicesOrders: Caching ${allOrders.length} orders to SQLite...`);
+      const db = getDB();
+      db.withTransactionSync(() => {
+        allOrders.forEach((order) => {
+          try {
+            insertServiceOrderNoTransaction(order, db);
+          } catch (err) {
+            console.error("getServicesOrders: Error caching order", order.id, err);
+          }
+        });
+      });
+
+      // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA
+      try {
+        const loggedDriverId = credentials.driver_employee_id || credentials.userId || 0;
+        const today = new Date().toISOString().split('T')[0];
+        
+        console.log(`[Logistics] Calculando métricas para motorista ${loggedDriverId}...`);
+        await calculateDailyMetrics(
+          String(loggedDriverId),
+          credentials.email || 'Motorista',
+          today,
+          allOrders
+        );
+        
+        // Consolida o mês atual
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        const year = new Date().getFullYear();
+        await calculateMonthlyMetrics(month, year);
+        
+        console.log("[Logistics] Métricas de desempenho atualizadas.");
+      } catch (logErr) {
+        console.error("[Logistics] Erro ao atualizar métricas:", logErr);
+      }
+    }
 
     // 🔥 FILTRO POR ATOR (USUÁRIO)
-    // Se não for suporte@econtrole.com, filtra pelo driver_employee_id
+    let orders = allOrders;
     if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
-      const loggedDriverId = (credentials as any).driver_employee_id;
+      const loggedDriverId = credentials.driver_employee_id;
       if (loggedDriverId) {
         console.log(`[ActorFilter] Filtrando OS para o motorista ID: ${loggedDriverId}`);
-        orders = allOrders.filter(order => {
-          const orderDriverId = order.driver_employee_id;
-          return orderDriverId === loggedDriverId;
-        });
+        orders = allOrders.filter(order => order.driver_employee_id === loggedDriverId);
         console.log(`[ActorFilter] Exibindo ${orders.length} de ${allOrders.length} ordens.`);
       } else {
-        // Fallback para o comportamento anterior se driver_employee_id não estiver disponível
-        const loggedUserId = (credentials as any).userId;
+        const loggedUserId = credentials.userId;
         if (loggedUserId) {
           console.log(`[ActorFilter] driver_employee_id não encontrado, usando userId: ${loggedUserId}`);
           orders = allOrders.filter(order => {
@@ -240,51 +274,60 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       }
     }
 
-    console.log(`getServicesOrders: Received ${orders.length} orders from server (after filtering)`);
-
-    // Salva no cache SQLite
+    // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA (Baseado apenas nas OS do motorista)
     if (orders.length > 0) {
-      console.log("getServicesOrders: Caching orders to SQLite...");
-      const db = getDB();
-      db.withTransactionSync(() => {
-        orders.forEach((order) => {
-          try {
-            insertServiceOrderNoTransaction(order, db);
-          } catch (err) {
-            console.error("getServicesOrders: Error caching order", order.id, err);
-          }
-        });
-      });
-      console.log("getServicesOrders: Orders cached successfully");
+      try {
+        const loggedDriverId = credentials.driver_employee_id || credentials.userId || 0;
+        const today = new Date().toISOString().split('T')[0];
+
+        console.log(`[Logistics] Calculando métricas de desempenho para motorista ${loggedDriverId}...`);
+        await calculateDailyMetrics(
+          String(loggedDriverId),
+          credentials.email || 'Motorista',
+          today,
+          orders // 👈 Usa as ordens filtradas (o que ele realmente fez)
+        );
+
+        // Consolida o mês atual
+        const month = String(new Date().getMonth() + 1).padStart(2, '0');
+        const year = new Date().getFullYear();
+        await calculateMonthlyMetrics(month, year);
+
+        console.log("[Logistics] Métricas de desempenho atualizadas com sucesso.");
+      } catch (logErr) {
+        console.error("[Logistics] Erro ao atualizar métricas:", logErr);
+      }
     }
 
     return orders;
   } catch (error: any) {
-    // Não loga como erro se não tiver credenciais ou domain - isso é esperado
-    if (error.message === "NO_CREDENTIALS" || error.message === "NO_DOMAIN") {
-      console.log("getServicesOrders: No credentials or domain - user not authenticated");
-    } else if (error.message === "SESSION_EXPIRED") {
+    // Tratamento de erros
+    if (error.message === "SESSION_EXPIRED") {
       console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
-      // Não faz fallback para cache quando SESSION_EXPIRED
-      // Isso força o componente a detectar o erro e tentar refresh
     } else {
       console.error("getServicesOrders: Error:", error.message);
     }
 
-    // Se falhar a API, tenta retornar do cache (exceto SESSION_EXPIRED)
-    if (error.message !== "NO_CREDENTIALS" && error.message !== "NO_DOMAIN" && error.message !== "SESSION_EXPIRED") {
-      console.log("getServicesOrders: Falling back to SQLite cache...");
+    // Se falhar a API, tenta retornar do cache (exceto SESSION_EXPIRED que deve deslogar/refresh)
+    if (error.message !== "SESSION_EXPIRED" && error.message !== "NO_CREDENTIALS") {
       try {
+        console.log("getServicesOrders: Falling back to SQLite cache...");
         const cachedOrders = getServiceOrdersFromCache();
-        if (cachedOrders.length > 0) {
-          console.log(`getServicesOrders: Returning ${cachedOrders.length} cached orders`);
-          return cachedOrders;
+        
+        // Aplica filtro de ator no cache também se tivermos credenciais
+        const credentials = await getCredentials();
+        if (credentials && credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
+          const loggedDriverId = credentials.driver_employee_id;
+          if (loggedDriverId) {
+            return cachedOrders.filter(order => order.driver_employee_id === loggedDriverId);
+          }
         }
+        return cachedOrders;
       } catch (cacheError) {
         console.error("getServicesOrders: Cache fallback failed:", cacheError);
       }
     }
-
+    
     throw error;
   }
 };
@@ -615,7 +658,7 @@ export function getVoyageName(order: ServiceOrder | null | undefined): string | 
     if (typeof voyage === "object") {
       return (voyage as any).name || String((voyage as any).id || "") || null;
     }
-    if (typeof voyage === "string") return voyage;
+    if (typeof voyage === "string") voyage;
   }
   return (order as any).voyage_name || null;
 }

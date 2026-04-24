@@ -79,6 +79,15 @@ async function performLogin(
       // Parse body for error messages
       const body = await response.json().catch(() => ({}));
       
+      // 🔍 LOG EXTREMO: Verificando cada detalhe da resposta
+      const allHeaders: Record<string, string> = {};
+      response.headers.forEach((v, k) => { allHeaders[k] = v; });
+      
+      console.log(`[AUTH-DEBUG] 🛰️ Resposta do Servidor em ${url}:`);
+      console.log(`[AUTH-DEBUG] Status: ${response.status} ${response.statusText}`);
+      console.log(`[AUTH-DEBUG] Headers:`, JSON.stringify(allHeaders, null, 2));
+      console.log(`[AUTH-DEBUG] Corpo (Body):`, JSON.stringify(body, null, 2));
+
       if (response.status === 401 || response.status === 422) {
         throw new Error(
           body?.errors?.[0] ||
