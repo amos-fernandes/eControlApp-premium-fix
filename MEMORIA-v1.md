@@ -1384,29 +1384,30 @@ Ver arquivo `TESTES.md` para checklist completo de testes manuais.
 
 ---
 
-## 🎯 NOVIDADES v1.10.0 (2026-04-24) - Driver Actor Filter ✅💎
+## 🎯 NOVIDADES v1.11.0 (2026-04-24) - Logistics Performance ✅📊
 
-### **Filtro por Ator (driver_employee_id)** ✅👤
-- **Regra**: O motorista deve ver apenas as ordens de serviço atribuídas ao seu `driver_employee_id`, e não mais ao `user_auth.id`.
-- **Implementação**:
-  - **SQLite**: Adicionada coluna `driver_employee_id` nas tabelas `service_orders` e `credentials`.
-  - **Migração**: Sistema de migração automática adiciona a coluna se ela não existir.
-  - **AuthContext**: O app agora captura o `driver_employee_id` retornado pelo backend no momento do login e o persiste no SQLite e AsyncStorage.
-  - **Lógica de Filtro**: Em `getServicesOrders`, se o usuário não for `suporte@econtrole.com`, o app filtra as OS localmente comparando `order.driver_employee_id` com o `loggedDriverId`.
-  - **Fallback**: Mantido fallback para `userId` (`user_auth.id`) caso o `driver_employee_id` não esteja disponível na OS ou nas credenciais.
-- **Arquivos**: `context/AuthContext.tsx`, `services/servicesOrders.ts`, `databases/database.ts`, `services/api.ts`.
+### **Módulo de Logística & KPIs** ✅🚚
+- **Nova Tab "Log"**: Adicionada aba dedicada para visualização de indicadores de desempenho (KPIs).
+- **Logistics Accordion**: Implementado componente `LogisticsCard` no topo da tela de Viagens. 
+  - Permite expansão para visualização rápida de métricas (Rota, Tempo, Produtividade, etc.).
+  - Atalho direto para a aba de detalhes.
+- **Persistência de Métricas**:
+  - Novas tabelas SQLite: `daily_metrics`, `vehicle_metrics` e `monthly_metrics`.
+  - Serviço `logisticsMetrics.ts` para cálculo de médias e avaliação de status baseada em metas.
+- **Interface Visual**: Utilização da nova paleta de cores (#088a8f) com suporte a temas Light/Dark e animações suaves de expansão.
+- **Arquivos**: `app/(tabs)/log.tsx`, `components/LogisticsCard.tsx`, `services/logisticsMetrics.ts`, `interfaces/LogisticsMetrics.ts`.
 
 ---
 
-## 📊 Resumo da v1.10.x
+## 📊 Resumo da v1.11.x
 
 | Feature | Versão | Status | Descrição |
 |---------|--------|--------|-----------|
-| **Filtro Motorista** | v1.10.0 | ✅ | Migração de filtro de `user_auth.id` para `driver_employee_id` |
-| **Persistência Auth** | v1.10.0 | ✅ | `driver_employee_id` salvo localmente para uso offline |
-| **Migração SQLite** | v1.10.0 | ✅ | Alteração de esquema automática para novas colunas |
+| **KPIs Logística** | v1.11.0 | ✅ | Nova aba e card expansível com indicadores de performance |
+| **Banco de Métricas** | v1.11.0 | ✅ | Suporte a dados históricos de logística no SQLite |
+| **Integração Home** | v1.11.0 | ✅ | Card de logística integrado ao topo da tela principal |
 
 **Última Atualização**: 2026-04-24  
-**Versão**: 1.10.0  
+**Versão**: 1.11.0  
 **Status**: ✅ Desenvolvimento (branch `dev1.1`)  
 

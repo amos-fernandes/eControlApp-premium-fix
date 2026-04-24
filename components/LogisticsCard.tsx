@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { Colors } from '@/constants/colors';
 import { useTheme } from '@/constants/theme';
 import { useQuery } from '@tanstack/react-query';
 import { getLogisticsKPIs, evaluateKPIStatus } from '@/services/logisticsMetrics';
@@ -100,11 +101,11 @@ export function LogisticsCard({ onPress }: LogisticsCardProps) {
       {/* Header (sempre visível) */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={[styles.iconContainer, { backgroundColor: theme.primary + '15' }]}>
+          <View style={[styles.iconContainer, { backgroundColor: Colors.primary + '15' }]}>
             <MaterialCommunityIcons 
               name="truck-delivery" 
               size={20} 
-              color={theme.primary} 
+              color={Colors.primary} 
             />
           </View>
           <View>
@@ -119,7 +120,7 @@ export function LogisticsCard({ onPress }: LogisticsCardProps) {
         
         <View style={styles.headerRight}>
           <Pressable 
-            style={[styles.seeAllButton, { backgroundColor: theme.primary }]}
+            style={[styles.seeAllButton, { backgroundColor: Colors.primary }]}
             onPress={handleSeeAll}
           >
             <Text style={styles.seeAllText}>Detalhes</Text>

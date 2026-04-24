@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Colors } from '@/constants/colors';
 import { useTheme } from '@/constants/theme';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -214,10 +215,10 @@ function SummaryItem({ label, value, icon, highlight }: { label: string; value: 
       styles.summaryItem, 
       { 
         backgroundColor: highlight ? Colors.primary + '10' : theme.surfaceSecondary,
-        borderColor: highlight ? theme.primary : theme.border,
+        borderColor: highlight ? Colors.primary : theme.border,
       }
     ]}>
-      <MaterialCommunityIcons name={icon as any} size={20} color={highlight ? theme.primary : theme.textSecondary} />
+      <MaterialCommunityIcons name={icon as any} size={20} color={highlight ? Colors.primary : theme.textSecondary} />
       <Text style={[styles.summaryValue, { color: theme.text }]}>{value}</Text>
       <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>{label}</Text>
     </View>
