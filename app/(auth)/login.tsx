@@ -121,7 +121,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[Colors.primaryDark, "#eafbf1", "#e8fbef"]}
+      colors={["#088a8f", "#2aadb3"]}
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <KeyboardAvoidingView
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#4A6357",
+    color: "#088a8f",
     marginBottom: 6,
     fontFamily: "Inter_600SemiBold",
   },

@@ -79,16 +79,6 @@ async function performLogin(
       // Parse body for error messages
       const body = await response.json().catch(() => ({}));
       
-      console.log(`[AuthContext] 🛡️ Resposta de ${url}:`, {
-        status: response.status,
-        headers: {
-          'access-token': response.headers.get('access-token') ? 'PRESENT' : 'MISSING',
-          'client': response.headers.get('client') ? 'PRESENT' : 'MISSING',
-          'uid': response.headers.get('uid') ? 'PRESENT' : 'MISSING',
-        },
-        bodySample: JSON.stringify(body).slice(0, 500)
-      });
-
       if (response.status === 401 || response.status === 422) {
         throw new Error(
           body?.errors?.[0] ||
@@ -112,15 +102,17 @@ async function performLogin(
         response.headers.get("access-token") ||
         response.headers.get("Access-Token") ||
         response.headers.get("Authorization")?.replace("Bearer ", "") ||
+        response.headers.get("X-User-Token") ||
         "";
       const clientHeader =
         response.headers.get("client") || response.headers.get("Client") || "";
       const uidHeader =
         response.headers.get("uid") || response.headers.get("Uid") || "";
 
-      // 🔥 Captura ID do usuário (vindo do body.data.id ou body.id)
-      const userId = body?.data?.id || body?.id || undefined;
-      const driver_employee_id = body?.data?.driver_employee_id || body?.driver_employee_id || undefined;
+      // 🔥 Captura ID do usuário (Ajustado para estrutura aninhada body.data.user.id)
+      const userId = body?.data?.user?.id || body?.data?.id || body?.id || undefined;
+      // Captura o employee_id (que usaremos como driver_employee_id)
+      const driver_employee_id = body?.data?.user?.employee_id || body?.data?.employee_id || body?.employee_id || undefined;
 
       if (accessTokenHeader) {
         return {
@@ -132,13 +124,15 @@ async function performLogin(
         };
       }
 
-      // Fall back to body token (some API variants)
+      // Fall back to body token (JWT or other variants)
       const bodyToken =
         body?.access_token ||
         body?.token ||
         body?.auth_token ||
         body?.data?.access_token ||
         body?.data?.token ||
+        body?.data?.user?.authentication_token ||
+        body?.data?.authentication_token ||
         "";
 
       if (bodyToken) {
