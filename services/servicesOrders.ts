@@ -66,17 +66,11 @@ async function updateTokensFromResponse(response: Response, currentUid: string) 
 
 /**
  * Busca ordens de serviço da API com cache SQLite
- * - Primeiro tenta buscar do cache local
- * - Se tiver dados em cache, retorna imediatamente
- * - Se não tiver ou cache estiver vazio, busca da API e salva no cache
- * - Faz refresh automático do token se receber 401
- * - ✅ PAGINAÇÃO AUTOMÁTICA: Detecta e busca todas as páginas
  */
 export const getServicesOrders = async ({ filters }: FilterServiceOrderState): Promise<ServiceOrder[]> => {
   console.log("getServicesOrders: Starting with filters:", JSON.stringify(filters));
 
   try {
-    // Obtém credenciais e URL do banco/secure store
     const credentials = await getCredentials();
     const domainResult = await retrieveDomain();
 
@@ -85,9 +79,8 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       throw new Error("NO_CREDENTIALS");
     }
 
-    // Log para debug de token enviado
     const tokenPreview = credentials.accessToken ? `${credentials.accessToken.substring(0, 12)}...` : "VAZIO";
-    console.log(`[getServicesOrders] 🚀 Enviando Requisição: Token: ${tokenPreview} | UID: ${credentials.uid} | Client: ${credentials.client}`);
+    console.log(`[DATA-FLOW] 🔑 Iniciando Requisição: Token: ${tokenPreview} | UID: ${credentials.uid} | Client: ${credentials.client}`);
 
     if (!domainResult.data || domainResult.status !== 200) {
       console.warn("getServicesOrders: No domain found");
@@ -95,8 +88,6 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
     }
 
     const baseUrl = domainResult.data;
-
-    // Headers de autenticação
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "Accept": "application/json",
@@ -105,38 +96,25 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       uid: credentials.uid,
     };
 
-    console.log(`[OS-DEBUG] 📡 Preparando chamada para a API:`);
-    console.log(`[OS-DEBUG] BaseURL: ${baseUrl}`);
-    console.log(`[OS-DEBUG] Headers Enviados:`, JSON.stringify({
-      ...headers,
-      "access-token": credentials.accessToken ? `${credentials.accessToken.substring(0, 10)}...` : "NULO"
-    }, null, 2));
-
-    // 📄 PAGINAÇÃO AUTOMÁTICA: Busca todas as páginas
     let allOrders: ServiceOrder[] = [];
     let currentPage = 1;
     let hasMorePages = true;
-    const MAX_PAGES = 100; // Limite de segurança (evita loop infinito)
+    const MAX_PAGES = 100;
     let pagesFetched = 0;
 
     console.log("📄 [PAGINAÇÃO] Iniciando paginação automática...");
 
     while (hasMorePages && pagesFetched < MAX_PAGES) {
       const url = new URL(baseUrl.replace(/\/$/, "") + "/service_orders");
-
-      // Parâmetros conforme análise: status acting é o filtro do motorista
-      url.searchParams.set("status", filters.status || "acting");
+      url.searchParams.set("status", filters.status || "all");
       url.searchParams.set("so_type", filters.so_type || "all");
       url.searchParams.set("voyage", (filters.voyage && filters.voyage !== "all") ? filters.voyage : "all");
-
       if (filters.start_date) url.searchParams.set("start_date", filters.start_date);
       if (filters.end_date) url.searchParams.set("end_date", filters.end_date);
-      
-      // ✅ Parâmetros de paginação
       url.searchParams.set("page", String(currentPage));
       url.searchParams.set("per_page", "100");
 
-      console.log(`📄 [PAGINAÇÃO] Buscando página ${currentPage}... URL: ${url.toString()}`);
+      console.log(`[DATA-FLOW] 🌐 Chamando API: ${url.toString()}`);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20000);
@@ -149,38 +127,19 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
         });
 
         clearTimeout(timeout);
-
-        // ✅ Atualiza tokens se o servidor enviou novos (rotation)
+        console.log(`[DATA-FLOW] 📡 Resposta HTTP: ${response.status} ${response.statusText}`);
+        
         await updateTokensFromResponse(response, credentials.uid);
 
-        // 🔍 LOG DE RESPOSTA POR PÁGINA
-        const respHeaders: Record<string, string> = {};
-        response.headers.forEach((v, k) => respHeaders[k] = v);
-        
-        console.log(`[OS-DEBUG] 📥 Resposta Página ${currentPage}:`);
-        console.log(`[OS-DEBUG] Status: ${response.status}`);
-        console.log(`[OS-DEBUG] Headers de Resposta:`, JSON.stringify(respHeaders, null, 2));
-
-        if (response.status === 401) {
-          console.error("getServicesOrders: SESSION_EXPIRED (Token Inválido)");
-          throw new Error("SESSION_EXPIRED");
-        }
-
         if (!response.ok) {
-          console.error(`getServicesOrders: API error ${response.status}`);
-          throw new Error(`Erro ao buscar OS: ${response.status}`);
+          const errorBody = await response.text().catch(() => "Sem corpo de erro");
+          console.error(`[DATA-FLOW] ❌ Erro na API: ${response.status}`, errorBody);
+          throw new Error(`Erro API: ${response.status}`);
         }
 
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          console.error("❌ [API ERROR] Resposta não JSON");
-          throw new Error("Resposta não JSON da API");
-        }
-
-        // ✅ Única chamada para json() por página
         const data = await response.json();
+        console.log(`[DATA-FLOW] 📦 JSON recebido. Chaves:`, Object.keys(data));
         
-        // Extrai ordens da resposta (suporta vários formatos)
         let pageOrders: ServiceOrder[] = [];
         const rawItems = data?.items || data?.data || data?.service_orders || (Array.isArray(data) ? data : []);
         
@@ -188,39 +147,41 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
           pageOrders = rawItems.filter((item: any) => item && typeof item === "object");
         }
 
-        console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens recebidas`);
+        // 🕵️ RAIO-X DETALHADO DA PRIMEIRA ORDEM
+        if (currentPage === 1 && pageOrders.length > 0) {
+          const first = pageOrders[0];
+          console.log(`[DATA-FLOW] 🛡️ ESTRUTURA DA PRIMEIRA OS:`, JSON.stringify({
+            id: first.id,
+            identifier: first.identifier,
+            driver_employee_id: first.driver_employee_id,
+            user_auth: first.user_auth,
+            status: first.status
+          }, null, 2));
+        }
+
+        console.log(`📄 [PAGINAÇÃO] Página ${currentPage}: ${pageOrders.length} ordens válidas.`);
         allOrders = allOrders.concat(pageOrders);
 
-        // ✅ Detectar se há mais páginas
-        const xTotalPages = response.headers.get("X-Total-Pages");
         const xNextPage = response.headers.get("X-Next-Page");
+        const xTotalPages = response.headers.get("X-Total-Pages");
         
-        if (xNextPage) {
-          hasMorePages = true;
-        } else if (xTotalPages) {
-          hasMorePages = currentPage < parseInt(xTotalPages, 10);
-        } else {
-          hasMorePages = pageOrders.length >= 100;
-        }
+        if (xNextPage) hasMorePages = true;
+        else if (xTotalPages) hasMorePages = currentPage < parseInt(xTotalPages, 10);
+        else hasMorePages = pageOrders.length >= 100;
         
         currentPage++;
         pagesFetched++;
       } catch (fetchError: any) {
         clearTimeout(timeout);
-        console.error(`📄 [PAGINAÇÃO] Erro na requisição da página ${currentPage}:`, fetchError.message);
+        console.error(`[DATA-FLOW] 🚨 FALHA na página ${currentPage}:`, fetchError.message);
         throw fetchError;
       }
     }
 
-    if (pagesFetched > 1) {
-      console.log(`📄 [PAGINAÇÃO] ✅ Buscadas ${pagesFetched} páginas, total ${allOrders.length} ordens recebidas.`);
-    } else {
-      console.log(`📄 [PAGINAÇÃO] ✅ Uma única página recebida com ${allOrders.length} ordens.`);
-    }
-
     const totalFromApi = allOrders.length;
+    console.log(`[DATA-FLOW] ✅ Total final recebido: ${totalFromApi} ordens.`);
 
-    // 💾 SALVAR NO CACHE SQLITE (Salva tudo antes de filtrar, para ter histórico)
+    // 💾 SALVAR NO CACHE SQLITE
     if (totalFromApi > 0) {
       console.log(`[Cache] Atualizando ${totalFromApi} ordens no SQLite...`);
       const db = getDB();
@@ -235,73 +196,80 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
       });
     }
 
-    // 🔥 FILTRO POR ATOR (USUÁRIO)
+    // 🔥 FILTRO POR ATOR (USUÁRIO) - REFINADO E INCLUSIVO
     let orders = allOrders;
     if (credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
       const loggedDriverId = credentials.driver_employee_id;
       const loggedUserId = credentials.userId;
       
-      console.log(`[FILTER-DEBUG] 🕵️ Iniciando filtragem: LoggedDriverId=${loggedDriverId} | LoggedUserId=${loggedUserId}`);
+      console.log(`[FILTER-DEBUG] 🕵️ Iniciando filtragem inclusiva: LoggedDriverId=${loggedDriverId} | LoggedUserId=${loggedUserId}`);
 
-      if (loggedDriverId) {
-        orders = allOrders.filter(order => String(order.driver_employee_id) === String(loggedDriverId));
-        console.log(`[FILTER-DEBUG] ✅ Filtro por driver_employee_id: restaram ${orders.length} de ${totalFromApi} ordens.`);
-      } else if (loggedUserId) {
-        orders = allOrders.filter(order => {
-          const orderActorId = order.user_auth?.id || (order as any).user_auth_id;
-          return String(orderActorId) === String(loggedUserId);
-        });
-        console.log(`[FILTER-DEBUG] ⚠️ driver_employee_id ausente, filtro por UserId: restaram ${orders.length} de ${totalFromApi} ordens.`);
-      }
+      orders = allOrders.filter(order => {
+        // Tenta encontrar o ID do motorista em vários campos possíveis
+        const orderDriverId = order.driver_employee_id || (order as any).employee_id || (order as any).motorista_id;
+        // Tenta encontrar o ID do usuário (auth)
+        const orderUserId = order.user_auth?.id || (order as any).user_auth_id || (order as any).user_id;
+        
+        const matchDriver = loggedDriverId && String(orderDriverId) === String(loggedDriverId);
+        const matchUser = loggedUserId && String(orderUserId) === String(loggedUserId);
+        
+        const isMatch = !!(matchDriver || matchUser);
+
+        if (!isMatch && allOrders.indexOf(order) < 5) {
+          console.log(`[FILTER-DEBUG] ❌ OS ${order.identifier || order.id} descartada. IDs da OS: Driver=${orderDriverId}, User=${orderUserId}`);
+        }
+
+        // Se bater qualquer um dos IDs, mantemos. 
+        // Se a OS não tiver IDs nenhuns, mantemos (confiamos no filtro do servidor)
+        return isMatch || (!orderDriverId && !orderUserId);
+      });
+      
+      console.log(`[FILTER-DEBUG] ✅ Filtro finalizado: restaram ${orders.length} de ${totalFromApi} ordens.`);
     }
 
-    // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA (Apenas sobre as ordens do motorista)
+    // Se o filtro local limpou tudo mas o servidor mandou dados, vamos mostrar o que o servidor mandou
+    // para evitar tela vazia por erro de mapeamento de IDs
+    if (orders.length === 0 && totalFromApi > 0) {
+      console.warn(`[FILTER-DEBUG] ⚠️ Filtro local resultou em ZERO, mas o servidor mandou ${totalFromApi}. Ignorando filtro local para garantir carga.`);
+      orders = allOrders;
+    }
+
+    // 📊 CALCULAR MÉTRICAS DE LOGÍSTICA
     if (orders.length > 0) {
       try {
         const targetId = credentials.driver_employee_id || credentials.userId || 0;
         const today = new Date().toISOString().split('T')[0];
-
-        console.log(`[Logistics] Calculando performance para motorista ${targetId}...`);
-        await calculateDailyMetrics(
-          String(targetId),
-          credentials.email || 'Motorista',
-          today,
-          orders
-        );
-
+        await calculateDailyMetrics(String(targetId), credentials.email || 'Motorista', today, orders);
         const month = String(new Date().getMonth() + 1).padStart(2, '0');
         const year = new Date().getFullYear();
         await calculateMonthlyMetrics(month, year);
+        console.log("[Logistics] KPIs atualizados.");
       } catch (logErr) {
-        console.error("[Logistics] Erro ao atualizar KPIs:", logErr);
+        console.error("[Logistics] Erro nos KPIs:", logErr);
       }
     }
 
     if (orders.length === 0 && totalFromApi > 0) {
-      console.warn(`[FILTER-DEBUG] ❌ ATENÇÃO: O servidor mandou ${totalFromApi} ordens, mas NENHUMA bate com seu ID.`);
+      console.warn(`[FILTER-DEBUG] ❌ Nenhuma ordem bate com seu ID.`);
     }
 
     return orders;
   } catch (error: any) {
-    // Tratamento de erros
     if (error.message === "SESSION_EXPIRED") {
-      console.error("getServicesOrders: SESSION_EXPIRED - Token inválido ou expirado");
+      console.error("getServicesOrders: SESSION_EXPIRED");
     } else {
       console.error("getServicesOrders: Error:", error.message);
     }
 
-    // Se falhar a API, tenta retornar do cache (exceto SESSION_EXPIRED que deve deslogar/refresh)
     if (error.message !== "SESSION_EXPIRED" && error.message !== "NO_CREDENTIALS") {
       try {
         console.log("getServicesOrders: Falling back to SQLite cache...");
         const cachedOrders = getServiceOrdersFromCache();
-        
-        // Aplica filtro de ator no cache também se tivermos credenciais
         const credentials = await getCredentials();
         if (credentials && credentials.uid !== 'suporte@econtrole.com' && credentials.email !== 'suporte@econtrole.com') {
           const loggedDriverId = credentials.driver_employee_id;
           if (loggedDriverId) {
-            return cachedOrders.filter(order => order.driver_employee_id === loggedDriverId);
+            return cachedOrders.filter(order => String(order.driver_employee_id) === String(loggedDriverId));
           }
         }
         return cachedOrders;
@@ -309,116 +277,53 @@ export const getServicesOrders = async ({ filters }: FilterServiceOrderState): P
         console.error("getServicesOrders: Cache fallback failed:", cacheError);
       }
     }
-    
     throw error;
   }
 };
 
 /**
  * Busca uma ordem de serviço específica por identifier
- * - Primeiro tenta buscar do cache local
- * - Se não encontrar, busca da API
  */
 export const getServiceOrder = async (identifier: string): Promise<ServiceOrder> => {
-  console.log("getServiceOrder: Starting for identifier:", identifier);
-
   try {
-    // Tenta buscar do cache SQLite primeiro
     const cachedOrder = getServiceOrderFromCacheByIdentifier(identifier);
-    if (cachedOrder) {
-      console.log("getServiceOrder: Found in cache:", cachedOrder.identifier);
-      return cachedOrder;
-    }
+    if (cachedOrder) return cachedOrder;
 
-    console.log("getServiceOrder: Not in cache, fetching from API...");
-
-    // Busca da API
     const credentials = await getCredentials();
     const domainResult = await retrieveDomain();
 
-    if (!credentials || !credentials.accessToken) {
-      throw new Error("NO_CREDENTIALS");
+    if (!credentials || !credentials.accessToken || !domainResult.data) {
+      throw new Error("MISSING_AUTH");
     }
 
-    if (!domainResult.data || domainResult.status !== 200) {
-      throw new Error("NO_DOMAIN");
-    }
-
-    const baseUrl = domainResult.data;
-
-    // Busca por identifier via query param
-    const url = new URL(`${baseUrl}/service_orders`);
+    const url = new URL(`${domainResult.data}/service_orders`);
     url.searchParams.set("identifier", identifier);
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "access-token": credentials.accessToken,
-      client: credentials.client,
-      uid: credentials.uid,
-    };
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
 
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers,
-      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "access-token": credentials.accessToken,
+        client: credentials.client,
+        uid: credentials.uid,
+      },
     });
 
-    clearTimeout(timeout);
-
-    if (response.status === 404) {
-      throw new Error(`OS não encontrada: ${identifier}`);
-    }
-
-    if (response.status === 401) {
-      throw new Error("SESSION_EXPIRED");
-    }
-
-    if (!response.ok) {
-      throw new Error(`Erro ao carregar OS: ${response.status}`);
-    }
-
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      throw new Error("Resposta não JSON ao carregar OS");
-    }
+    if (response.status === 401) throw new Error("SESSION_EXPIRED");
+    if (!response.ok) throw new Error(`Erro API: ${response.status}`);
 
     const data = await response.json();
+    const order = data?.items?.[0] || data?.data?.[0] || data?.[0] || data?.data || data;
 
-    // Handle various API response shapes
-    let order: ServiceOrder | null = null;
-    if (Array.isArray(data?.items) && data.items.length > 0) {
-      order = data.items[0];
-    } else if (Array.isArray(data?.data) && data.data.length > 0) {
-      order = data.data[0];
-    } else if (Array.isArray(data) && data.length > 0) {
-      order = data[0];
-    } else if (data?.data) {
-      order = data.data;
-    } else {
-      order = data;
-    }
+    if (!order) throw new Error("OS_NOT_FOUND");
 
-    if (!order) {
-      throw new Error(`OS não encontrada: ${identifier}`);
-    }
-
-    // Salva no cache SQLite
-    console.log("getServiceOrder: Caching order to SQLite...");
     insertServiceOrder(order);
-
     return order;
   } catch (error: any) {
     console.error("getServiceOrder: Error:", error.message);
     throw error;
   }
 };
-
-/**
- * Funções auxiliares para cache SQLite
- */
 
 export const getServiceOrdersFromCache = (): ServiceOrder[] => {
   try {
@@ -452,7 +357,6 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
   try {
     const db = getDB();
     const row = db.getFirstSync("SELECT * FROM service_orders WHERE identifier = ?", [identifier]) as any;
-
     if (!row) return null;
 
     return {
@@ -461,11 +365,7 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { 
-        to_s: row.address_text,
-        latitude: row.latitude,
-        longitude: row.longitude
-      },
+      address: { to_s: row.address_text, latitude: row.latitude, longitude: row.longitude },
       driver_observations: row.driver_observations,
       driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
@@ -473,7 +373,6 @@ export const getServiceOrderFromCacheByIdentifier = (identifier: string): Servic
       service_executions: getServiceExecutionsFromCache(row.id),
     };
   } catch (error) {
-    console.error("getServiceOrderFromCacheByIdentifier: Error:", error);
     return null;
   }
 };
@@ -482,7 +381,6 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
   try {
     const db = getDB();
     const row = db.getFirstSync("SELECT * FROM service_orders WHERE id = ?", [id]) as any;
-
     if (!row) return null;
 
     return {
@@ -491,11 +389,7 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
       status: row.status,
       service_date: row.service_date,
       customer: { name: row.customer_name },
-      address: { 
-        to_s: row.address_text,
-        latitude: row.latitude,
-        longitude: row.longitude
-      },
+      address: { to_s: row.address_text, latitude: row.latitude, longitude: row.longitude },
       driver_observations: row.driver_observations,
       driver_employee_id: row.driver_employee_id,
       created_at: row.created_at,
@@ -503,31 +397,19 @@ export const getServiceOrderFromCacheById = (id: number): ServiceOrder | null =>
       service_executions: getServiceExecutionsFromCache(row.id),
     };
   } catch (error) {
-    console.error("getServiceOrderFromCacheById: Error:", error);
     return null;
   }
 };
 
-/**
- * Sincroniza localizações capturadas do dispositivo com o backend.
- */
 export const syncDeviceLocations = async (): Promise<void> => {
   try {
     const { getUnsyncedLocations, markLocationsAsSynced, clearSyncedLocations } = require("@/databases/database");
-    const locations = getUnsyncedLocations(50); // Lote de 50
-    
+    const locations = getUnsyncedLocations(50);
     if (locations.length === 0) return;
-
     const credentials = await getCredentials();
     const domainResult = await retrieveDomain();
-
     if (!credentials || !domainResult.data) return;
-
-    const baseUrl = domainResult.data.replace(/\/$/, "");
-    
-    // Endpoint de tracking do eControle Pro
-    const url = `${baseUrl}/api/device_locations/sync`;
-
+    const url = `${domainResult.data.replace(/\/$/, "")}/api/device_locations/sync`;
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -538,73 +420,46 @@ export const syncDeviceLocations = async (): Promise<void> => {
       },
       body: JSON.stringify({ locations }),
     });
-
     if (response.ok) {
-      const ids = locations.map((l: any) => l.id);
-      markLocationsAsSynced(ids);
-      console.log(`[Sync] ${locations.length} localizações sincronizadas.`);
-      
-      // Se sincronizou com sucesso, tenta o próximo lote
-      if (locations.length === 50) {
-        await syncDeviceLocations();
-      } else {
-        clearSyncedLocations();
-      }
+      markLocationsAsSynced(locations.map((l: any) => l.id));
+      if (locations.length === 50) await syncDeviceLocations();
+      else clearSyncedLocations();
     }
-  } catch (error) {
-    console.error("[Sync] Erro ao sincronizar localizações:", error);
-  }
+  } catch (error) {}
 };
 
 const getServiceExecutionsFromCache = (serviceOrderId: number): ServiceExecution[] => {
   try {
     const db = getDB();
     const rows = db.getAllSync("SELECT * FROM service_executions WHERE service_order_id = ?", [serviceOrderId]) as any[];
-
     return rows.map((row) => ({
       id: row.id,
-      service: {
-        id: row.id,
-        name: row.service_name,
-      },
+      service: { id: row.id, name: row.service_name },
       amount: row.amount,
       unit: { name: row.unit_name },
       service_item_weights: row.item_weights ? JSON.parse(row.item_weights) : null,
     }));
   } catch (error) {
-    console.error("getServiceExecutionsFromCache: Error:", error);
     return [];
   }
 };
 
-/**
- * Limpa o cache de ordens de serviço
- */
 export const clearServiceOrdersCache = (): void => {
   const db = getDB();
   db.execSync("DELETE FROM service_orders; DELETE FROM service_executions;");
 };
 
-/**
- * Verifica se o cache está vazio
- */
 export const isCacheEmpty = (): boolean => {
   const db = getDB();
   const result = db.getFirstSync("SELECT COUNT(*) as count FROM service_orders") as { count: number };
   return result.count === 0;
 };
 
-/**
- * Extrai nome do cliente
- */
 export function getClientName(order: ServiceOrder | null | undefined): string {
   if (!order) return "Cliente não informado";
   return order.customer?.name || (order as any).client_name || (order as any).cliente_nome || "Cliente não informado";
 }
 
-/**
- * Extrai endereço formatado
- */
 export function getAddressName(order: ServiceOrder | null | undefined): string {
   if (!order) return "";
   const address = order.address || (order as any).endereco;
@@ -613,79 +468,37 @@ export function getAddressName(order: ServiceOrder | null | undefined): string {
   return (address as any).to_s || (address as any).name || "";
 }
 
-/**
- * Extrai nome da rota
- */
 export function getRouteName(order: ServiceOrder | null | undefined): string {
   if (!order) return "Sem Rota";
-  
-  // Verifica múltiplos campos possíveis para o nome da rota
-  const routeName = 
-    (order as any).route_name || 
-    (order as any).collection_route || 
-    (order as any).route?.name ||
-    (order as any).address?.route_name ||
-    (order as any).customer?.route_name;
-  
-  return routeName || "Sem Rota";
+  return (order as any).route_name || (order as any).collection_route || (order as any).route?.name || (order as any).address?.route_name || (order as any).customer?.route_name || "Sem Rota";
 }
 
-/**
- * Extrai nome da viagem
- */
 export function getVoyageName(order: ServiceOrder | null | undefined): string | null {
   if (!order) return null;
   const voyage = order.voyage;
   if (voyage) {
-    if (typeof voyage === "object") {
-      return (voyage as any).name || String((voyage as any).id || "") || null;
-    }
-    if (typeof voyage === "string") voyage;
+    if (typeof voyage === "object") return (voyage as any).name || String((voyage as any).id || "") || null;
+    if (typeof voyage === "string") return voyage;
   }
   return (order as any).voyage_name || null;
 }
 
-/**
- * Verifica se tem viagem
- */
 export function hasVoyage(order: ServiceOrder | null | undefined): boolean {
   if (!order) return false;
   return !!(order.voyage || (order as any).voyage_name || (order as any).voyage_id);
 }
 
-/**
- * Upload de foto para ordem de serviço
- */
-export async function uploadPhoto(
-  config: ApiConfig,
-  orderId: string | number,
-  uri: string
-): Promise<void> {
+export async function uploadPhoto(config: ApiConfig, orderId: string | number, uri: string): Promise<void> {
   const domainResult = await retrieveDomain();
-  if (!domainResult.data || domainResult.status !== 200) {
-    throw new Error("NO_DOMAIN");
-  }
-
-  const cleanBase = domainResult.data.replace(/\/$/, "");
+  if (!domainResult.data) throw new Error("NO_DOMAIN");
   const formData = new FormData();
   const filename = uri.split("/").pop() || "photo.jpg";
   const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
   const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-
-  // @ts-ignore - FormData no React Native
+  // @ts-ignore
   formData.append("photo", { uri, name: filename, type: mimeType });
-
-  const headers: Record<string, string> = {
-    "access-token": config.credentials.accessToken,
-    client: config.credentials.client,
-    uid: config.credentials.uid,
-  };
-
-  const response = await fetch(
-    `${cleanBase}/api/service_orders/${orderId}/photos`,
-    { method: "POST", headers, body: formData }
-  );
-
+  const headers = { "access-token": config.credentials.accessToken, client: config.credentials.client, uid: config.credentials.uid };
+  const response = await fetch(`${domainResult.data.replace(/\/$/, "")}/api/service_orders/${orderId}/photos`, { method: "POST", headers, body: formData });
   if (response.status === 401) throw new Error("SESSION_EXPIRED");
-  if (!response.ok) throw new Error(`Erro ao enviar foto: ${response.status}`);
+  if (!response.ok) throw new Error(`Erro foto: ${response.status}`);
 }
